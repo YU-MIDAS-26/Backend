@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3:*)",
+      "Bash(pip install:*)",
+      "Bash(python -m pip --version)",
+      "Bash(/usr/bin/python3 -m pip install openpyxl --quiet)",
+      "Bash(/usr/bin/python3:*)",
+      "Bash(ls -la \"/Users/gimminhyeong/Downloads/Sheet_축\"*)",
+      "Bash(ls -la \"/Users/gimminhyeong/Downloads/Sheet_코\"*)"
+    ]
+  }
+}
