@@ -17,6 +17,7 @@ java {
 repositories {
     mavenCentral()
     maven { url 'https://repo.spring.io/milestone' }
+    maven { url 'https://repo.spring.io/snapshot' }
 }
 
 ext {
@@ -51,7 +52,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-webflux'
 
     // AI 챗봇
-    implementation 'org.springframework.ai:spring-ai-starter-model-openai'
+    implementation 'org.springframework.ai:spring-ai-starter-model-openai:1.0.0'
 
     // JWT
     implementation 'io.jsonwebtoken:jjwt-api:0.12.3'
