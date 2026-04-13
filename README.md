@@ -85,11 +85,11 @@ python scripts/run_kamis.py
 
 ```bash
 backend/
-├── spring-server/      # Spring Boot API 서버
-├── python-crawler/     # Python 크롤링
-├── docs/               # 관련 문서
-├── .gitignore
-├── .gitattributes
-├── .editorconfig
-└── README.md
+├── spring-server/      # Spring Boot 기반 API 서버 디렉토리
+├── python-crawler/     # Python 기반 크롤링 및 데이터 수집 디렉토리
+├── docs/               # 프로젝트 관련 문서 저장 디렉토리
+├── .gitignore          # Git 추적에서 제외할 파일 목록
+├── .gitattributes      # 줄바꿈 및 파일 속성 관리 설정
+├── .editorconfig       # 팀 공통 코드 스타일 및 편집기 설정
+└── README.md           # 프로젝트 설명 및 실행 방법 문서
 ```
