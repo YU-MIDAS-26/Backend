@@ -1,13 +1,30 @@
 spring :
     application :
         name : spring-server
-    
+
     profiles :
         active : local
-    
+
+    jpa :
+        open-in-view : false
+
 server :
     port : 8080
-    
+
 springdoc :
     swagger-ui :
         path : /swagger-ui.html
+
+# ===== KAMIS (농산물유통정보) - 비시크릿 기본값 =====
+kamis :
+    base-url : https://www.kamis.or.kr/service/price/xml.do
+    product-cls-code : "02"
+    country-code : "1101"
+    convert-kg-yn : "N"
+    collect :
+        cron : "0 0 9 * * *"
+
+# ===== Naver Shopping API - 비시크릿 기본값 =====
+naver :
+    shopping :
+        search-url : https://openapi.naver.com/v1/search/shop.json
