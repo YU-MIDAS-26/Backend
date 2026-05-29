@@ -58,6 +58,9 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 30)
     private UserStatus status;
 
+    @Column(length = 500)
+    private String rejectionReason;
+
     public static User createStepOneUser(
             String name,
             LocalDate birthDate,
@@ -89,10 +92,25 @@ public class User extends BaseEntity {
         }
 
         this.status = UserStatus.PENDING_APPROVAL;
+        this.rejectionReason = null;
     }
 
     public void approve() {
+        if (this.status != UserStatus.PENDING_APPROVAL) {
+            throw new CustomException(ErrorCode.INVALID_USER_STATUS);
+        }
+
         this.status = UserStatus.ACTIVE;
+        this.rejectionReason = null;
+    }
+
+    public void reject(String rejectionReason) {
+        if (this.status != UserStatus.PENDING_APPROVAL) {
+            throw new CustomException(ErrorCode.INVALID_USER_STATUS);
+        }
+
+        this.status = UserStatus.REJECTED;
+        this.rejectionReason = rejectionReason;
     }
 
     public void delete() {
