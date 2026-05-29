@@ -43,7 +43,9 @@ public class SecurityConfig {
                                 "/api/auth/student-id/check",
                                 "/api/auth/register/step-one",
                                 "/api/auth/register/step-two",
-                                "/api/auth/login"
+                                "/api/auth/login",
+                                "/api/auth/password-reset/request",
+                                "/api/auth/password-reset/confirm"
                         ).permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
