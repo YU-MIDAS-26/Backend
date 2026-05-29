@@ -22,15 +22,25 @@ dependencies {
     // Web & Validation
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'        // ← 복원 (KAMIS·Naver WebClient)
+
+    // Security & Auth (인증/JWT 모듈용)
+    implementation 'org.springframework.boot:spring-boot-starter-security'       // ← 복원
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'  // ← 복원
+    implementation 'org.thymeleaf.extras:thymeleaf-extras-springsecurity6'       // ← 복원
+
+    // Thymeleaf / Mail
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'      // ← 복원
+    implementation 'org.springframework.boot:spring-boot-starter-mail'           // ← 복원
 
     // Database & Persistence
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'com.mysql:mysql-connector-j'
-    
-    // HTTP Client for AI API (OpenAI)
-    implementation 'org.springframework.boot:spring-boot-starter-web'
 
-
+    // JWT (인증 모듈용)
+    implementation 'io.jsonwebtoken:jjwt-api:0.13.0'                              // ← 복원
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'                                // ← 복원
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'                             // ← 복원
 
     // Documentation (Swagger)
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0'
@@ -42,6 +52,7 @@ dependencies {
 
     // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.security:spring-security-test'        // ← 복원
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
