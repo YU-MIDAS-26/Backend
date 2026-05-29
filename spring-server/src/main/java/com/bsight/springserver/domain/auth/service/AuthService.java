@@ -10,6 +10,9 @@ import com.bsight.springserver.domain.auth.dto.response.LoginResponse;
 import com.bsight.springserver.domain.auth.dto.response.RegisterStepTwoResponse;
 import com.bsight.springserver.domain.auth.entity.EmailVerification;
 import com.bsight.springserver.domain.auth.repository.EmailVerificationRepository;
+import com.bsight.springserver.domain.auth.dto.response.LogoutResponse;
+import com.bsight.springserver.domain.auth.entity.JwtBlacklistToken;
+import com.bsight.springserver.domain.auth.repository.JwtBlacklistTokenRepository;
 import com.bsight.springserver.domain.business.entity.BusinessProfile;
 import com.bsight.springserver.domain.business.repository.BusinessProfileRepository;
 import com.bsight.springserver.domain.business.service.BusinessLicenseFileStorageService;
@@ -44,6 +47,7 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final JwtBlacklistTokenRepository jwtBlacklistTokenRepository;
 
     @Transactional
     public void requestEmailVerificationCode(EmailVerificationRequest request) {
@@ -224,5 +228,33 @@ public class AuthService {
 
     private String generateVerificationCode() {
         return String.format("%06d", secureRandom.nextInt(1_000_000));
+    }
+
+    @Transactional
+    public LogoutResponse logout(String authorizationHeader) {
+        String token = extractAccessToken(authorizationHeader);
+
+        jwtTokenProvider.validateToken(token);
+
+        if (jwtBlacklistTokenRepository.existsByToken(token)) {
+            throw new CustomException(ErrorCode.ALREADY_LOGGED_OUT);
+        }
+
+        JwtBlacklistToken blacklistToken = JwtBlacklistToken.create(
+                token,
+                jwtTokenProvider.getTokenExpiresAt(token)
+        );
+
+        jwtBlacklistTokenRepository.save(blacklistToken);
+
+        return LogoutResponse.success();
+    }
+
+    private String extractAccessToken(String authorizationHeader) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+            throw new CustomException(ErrorCode.TOKEN_REQUIRED);
+        }
+
+        return authorizationHeader.substring(7);
     }
 }
