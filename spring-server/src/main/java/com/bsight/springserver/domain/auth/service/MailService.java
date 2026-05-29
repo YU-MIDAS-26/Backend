@@ -19,6 +19,9 @@ public class MailService {
     @Value("${app.mail.from}")
     private String from;
 
+    @Value("${app.password-reset.url}")
+    private String passwordResetUrl;
+
     public void sendEmailVerificationCode(String to, String code) {
         try {
             MimeMessage message = javaMailSender.createMimeMessage();
@@ -27,6 +30,22 @@ public class MailService {
             message.setRecipients(MimeMessage.RecipientType.TO, to);
             message.setSubject("[B-SIGHT] 이메일 인증번호 안내", "UTF-8");
             message.setContent(createEmailVerificationHtml(code), "text/html; charset=UTF-8");
+
+            javaMailSender.send(message);
+        } catch (MessagingException | MailException e) {
+            throw new CustomException(ErrorCode.EMAIL_SEND_FAILED);
+        }
+    }
+
+    public void sendPasswordResetLink(String to, String token) {
+        try {
+            MimeMessage message = javaMailSender.createMimeMessage();
+            String resetLink = passwordResetUrl + "?token=" + token;
+
+            message.setFrom(from);
+            message.setRecipients(MimeMessage.RecipientType.TO, to);
+            message.setSubject("[B-SIGHT] 비밀번호 재설정 안내", "UTF-8");
+            message.setContent(createPasswordResetHtml(resetLink), "text/html; charset=UTF-8");
 
             javaMailSender.send(message);
         } catch (MessagingException | MailException e) {
@@ -63,5 +82,40 @@ public class MailService {
                 </body>
                 </html>
                 """.formatted(code);
+    }
+
+    private String createPasswordResetHtml(String resetLink) {
+        return """
+                <!DOCTYPE html>
+                <html lang="ko">
+                <head>
+                    <meta charset="UTF-8">
+                    <title>B-SIGHT 비밀번호 재설정</title>
+                </head>
+                <body style="margin:0; padding:0; background:#f4f7f9; font-family:Arial, sans-serif;">
+                    <div style="max-width:560px; margin:40px auto; background:#ffffff; border-radius:16px; padding:32px; border:1px solid #e5edf2;">
+                        <h2 style="margin:0 0 16px; color:#263845;">B-SIGHT 비밀번호 재설정</h2>
+                        <p style="font-size:15px; line-height:1.7; color:#4b5b66;">
+                            안녕하세요.<br>
+                            아래 버튼을 눌러 새 비밀번호를 설정해 주세요.
+                        </p>
+                        <div style="margin:28px 0; text-align:center;">
+                            <a href="%s"
+                               style="display:inline-block; padding:14px 28px; background:#7fa6ba; color:#ffffff; text-decoration:none; border-radius:10px; font-size:15px; font-weight:700;">
+                                비밀번호 재설정하기
+                            </a>
+                        </div>
+                        <p style="font-size:14px; line-height:1.7; color:#6b7c86;">
+                            링크는 10분 동안만 유효합니다.<br>
+                            본인이 요청하지 않았다면 이 메일은 무시하셔도 됩니다.
+                        </p>
+                        <p style="font-size:12px; line-height:1.6; color:#8a9aa4; word-break:break-all;">
+                            버튼이 동작하지 않으면 아래 링크를 복사해 브라우저에 붙여넣어 주세요.<br>
+                            %s
+                        </p>
+                    </div>
+                </body>
+                </html>
+                """.formatted(resetLink, resetLink);
     }
 }
