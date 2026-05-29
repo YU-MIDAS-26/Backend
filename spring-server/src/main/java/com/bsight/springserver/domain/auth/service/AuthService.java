@@ -3,16 +3,21 @@ package com.bsight.springserver.domain.auth.service;
 import com.bsight.springserver.domain.auth.dto.request.EmailVerificationConfirmRequest;
 import com.bsight.springserver.domain.auth.dto.request.EmailVerificationRequest;
 import com.bsight.springserver.domain.auth.dto.request.LoginRequest;
+import com.bsight.springserver.domain.auth.dto.request.PasswordResetConfirmRequest;
+import com.bsight.springserver.domain.auth.dto.request.PasswordResetRequest;
 import com.bsight.springserver.domain.auth.dto.request.RegisterStepOneRequest;
 import com.bsight.springserver.domain.auth.dto.request.RegisterStepTwoRequest;
 import com.bsight.springserver.domain.auth.dto.request.StudentIdCheckRequest;
 import com.bsight.springserver.domain.auth.dto.response.LoginResponse;
 import com.bsight.springserver.domain.auth.dto.response.LogoutResponse;
+import com.bsight.springserver.domain.auth.dto.response.PasswordResetResponse;
 import com.bsight.springserver.domain.auth.dto.response.RegisterStepTwoResponse;
 import com.bsight.springserver.domain.auth.entity.EmailVerification;
 import com.bsight.springserver.domain.auth.entity.JwtBlacklistToken;
+import com.bsight.springserver.domain.auth.entity.PasswordResetToken;
 import com.bsight.springserver.domain.auth.repository.EmailVerificationRepository;
 import com.bsight.springserver.domain.auth.repository.JwtBlacklistTokenRepository;
+import com.bsight.springserver.domain.auth.repository.PasswordResetTokenRepository;
 import com.bsight.springserver.domain.business.entity.BusinessProfile;
 import com.bsight.springserver.domain.business.repository.BusinessProfileRepository;
 import com.bsight.springserver.domain.business.service.BusinessLicenseFileStorageService;
@@ -30,6 +35,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -37,6 +43,7 @@ import java.time.LocalDateTime;
 public class AuthService {
 
     private static final int EMAIL_VERIFICATION_EXPIRE_MINUTES = 5;
+    private static final int PASSWORD_RESET_EXPIRE_MINUTES = 10;
     private static final String BEARER_PREFIX = "Bearer ";
 
     private final SecureRandom secureRandom = new SecureRandom();
@@ -46,6 +53,7 @@ public class AuthService {
     private final BusinessProfileRepository businessProfileRepository;
     private final BusinessLicenseFileStorageService businessLicenseFileStorageService;
     private final JwtBlacklistTokenRepository jwtBlacklistTokenRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
     private final JwtTokenProvider jwtTokenProvider;
@@ -211,6 +219,54 @@ public class AuthService {
         jwtBlacklistTokenRepository.save(blacklistToken);
 
         return LogoutResponse.loggedOut();
+    }
+
+    @Transactional
+    public PasswordResetResponse requestPasswordReset(PasswordResetRequest request) {
+        String studentId = request.studentId().trim();
+        String email = request.email().trim();
+
+        User user = userRepository.findByStudentIdAndEmailAndStatusNot(studentId, email, UserStatus.DELETED)
+                .orElseThrow(() -> new CustomException(ErrorCode.PASSWORD_RESET_USER_NOT_FOUND));
+
+        String token = UUID.randomUUID().toString();
+
+        PasswordResetToken passwordResetToken = PasswordResetToken.create(
+                token,
+                user,
+                LocalDateTime.now().plusMinutes(PASSWORD_RESET_EXPIRE_MINUTES)
+        );
+
+        passwordResetTokenRepository.save(passwordResetToken);
+        mailService.sendPasswordResetLink(email, token);
+
+        return PasswordResetResponse.requested();
+    }
+
+    @Transactional
+    public PasswordResetResponse confirmPasswordReset(PasswordResetConfirmRequest request) {
+        if (!request.newPassword().equals(request.newPasswordConfirm())) {
+            throw new CustomException(ErrorCode.PASSWORD_CONFIRM_NOT_MATCHED);
+        }
+
+        PasswordResetToken passwordResetToken = passwordResetTokenRepository.findByToken(request.token().trim())
+                .orElseThrow(() -> new CustomException(ErrorCode.PASSWORD_RESET_TOKEN_NOT_FOUND));
+
+        if (passwordResetToken.isUsed()) {
+            throw new CustomException(ErrorCode.PASSWORD_RESET_TOKEN_ALREADY_USED);
+        }
+
+        if (passwordResetToken.isExpired(LocalDateTime.now())) {
+            throw new CustomException(ErrorCode.PASSWORD_RESET_TOKEN_EXPIRED);
+        }
+
+        User user = passwordResetToken.getUser();
+        String encodedPassword = passwordEncoder.encode(request.newPassword());
+
+        user.changePassword(encodedPassword);
+        passwordResetToken.use();
+
+        return PasswordResetResponse.completed();
     }
 
     private void validateRegisterStepOne(RegisterStepOneRequest request, String email, String studentId) {
