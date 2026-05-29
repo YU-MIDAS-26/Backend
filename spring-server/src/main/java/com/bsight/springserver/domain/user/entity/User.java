@@ -113,6 +113,10 @@ public class User extends BaseEntity {
         this.rejectionReason = rejectionReason;
     }
 
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
     public void delete() {
         this.status = UserStatus.DELETED;
     }
