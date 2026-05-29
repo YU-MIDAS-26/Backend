@@ -49,6 +49,9 @@ public enum ErrorCode {
     INVALID_FILE_EXTENSION(HttpStatus.BAD_REQUEST, "지원하지 않는 파일 형식입니다. pdf, jpg, jpeg, png 파일만 업로드할 수 있습니다."),
     FILE_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "파일 저장에 실패했습니다."),
 
+    EMPLOYEE_NOT_FOUND(HttpStatus.NOT_FOUND, "직원을 찾을 수 없습니다."),
+    EMPLOYEE_NUMBER_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 등록된 사원번호입니다."),
+
     INGREDIENT_NOT_FOUND(HttpStatus.NOT_FOUND, "재료를 찾을 수 없습니다."),
     INGREDIENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 등록된 재료입니다."),
 
