@@ -29,6 +29,14 @@ public enum ErrorCode {
     EMAIL_NOT_VERIFIED(HttpStatus.BAD_REQUEST, "이메일 인증을 완료해 주세요."),
     EMAIL_SEND_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "인증 메일 발송에 실패했습니다."),
 
+    BUSINESS_PROFILE_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 사업자 정보가 등록된 회원입니다."),
+    BUSINESS_REGISTRATION_NUMBER_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 등록된 사업자 등록 번호입니다."),
+    USER_STEP_ONE_NOT_FOUND(HttpStatus.NOT_FOUND, "회원가입 1단계 정보를 찾을 수 없습니다."),
+    INVALID_USER_STATUS(HttpStatus.BAD_REQUEST, "현재 회원 상태에서는 요청을 처리할 수 없습니다."),
+    FILE_REQUIRED(HttpStatus.BAD_REQUEST, "첨부 파일이 필요합니다."),
+    INVALID_FILE_EXTENSION(HttpStatus.BAD_REQUEST, "지원하지 않는 파일 형식입니다. pdf, jpg, jpeg, png 파일만 업로드할 수 있습니다."),
+    FILE_SAVE_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "파일 저장에 실패했습니다."),
+
     INGREDIENT_NOT_FOUND(HttpStatus.NOT_FOUND, "재료를 찾을 수 없습니다."),
     INGREDIENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 등록된 재료입니다."),
 
