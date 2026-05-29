@@ -18,6 +18,9 @@ public enum ErrorCode {
     INVALID_LOGIN(HttpStatus.UNAUTHORIZED, "아이디 또는 비밀번호가 일치하지 않습니다."),
     LOGIN_NOT_ALLOWED(HttpStatus.FORBIDDEN, "관리자 승인 완료 후 로그인이 가능합니다."),
 
+    TOKEN_REQUIRED(HttpStatus.UNAUTHORIZED, "토큰이 필요합니다."),
+    ALREADY_LOGGED_OUT(HttpStatus.UNAUTHORIZED, "이미 로그아웃된 토큰입니다."),
+
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
     EMAIL_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
     STUDENT_ID_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 사용 중인 아이디입니다."),
