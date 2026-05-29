@@ -3,9 +3,15 @@ package com.bsight.springserver.domain.auth.service;
 import com.bsight.springserver.domain.auth.dto.request.EmailVerificationConfirmRequest;
 import com.bsight.springserver.domain.auth.dto.request.EmailVerificationRequest;
 import com.bsight.springserver.domain.auth.dto.request.RegisterStepOneRequest;
+import com.bsight.springserver.domain.auth.dto.request.RegisterStepTwoRequest;
 import com.bsight.springserver.domain.auth.dto.request.StudentIdCheckRequest;
+import com.bsight.springserver.domain.auth.dto.response.RegisterStepTwoResponse;
 import com.bsight.springserver.domain.auth.entity.EmailVerification;
 import com.bsight.springserver.domain.auth.repository.EmailVerificationRepository;
+import com.bsight.springserver.domain.business.entity.BusinessProfile;
+import com.bsight.springserver.domain.business.repository.BusinessProfileRepository;
+import com.bsight.springserver.domain.business.service.BusinessLicenseFileStorageService;
+import com.bsight.springserver.domain.business.service.BusinessLicenseFileStorageService.StoredBusinessLicenseFile;
 import com.bsight.springserver.domain.user.entity.User;
 import com.bsight.springserver.domain.user.entity.UserStatus;
 import com.bsight.springserver.domain.user.repository.UserRepository;
@@ -30,6 +36,8 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final EmailVerificationRepository emailVerificationRepository;
+    private final BusinessProfileRepository businessProfileRepository;
+    private final BusinessLicenseFileStorageService businessLicenseFileStorageService;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
 
@@ -102,6 +110,57 @@ public class AuthService {
         );
 
         userRepository.save(user);
+    }
+
+    @Transactional
+    public RegisterStepTwoResponse registerStepTwo(RegisterStepTwoRequest request) {
+        String studentId = request.studentId().trim();
+        String businessRegistrationNumber = request.businessRegistrationNumber().trim();
+
+        User user = userRepository.findByStudentIdAndStatusNot(studentId, UserStatus.DELETED)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_STEP_ONE_NOT_FOUND));
+
+        if (user.getStatus() != UserStatus.PENDING_BUSINESS) {
+            throw new CustomException(ErrorCode.INVALID_USER_STATUS);
+        }
+
+        if (businessProfileRepository.existsByUser(user)) {
+            throw new CustomException(ErrorCode.BUSINESS_PROFILE_ALREADY_EXISTS);
+        }
+
+        if (businessProfileRepository.existsByBusinessRegistrationNumber(businessRegistrationNumber)) {
+            throw new CustomException(ErrorCode.BUSINESS_REGISTRATION_NUMBER_ALREADY_EXISTS);
+        }
+
+        StoredBusinessLicenseFile storedFile = businessLicenseFileStorageService.store(request.businessLicenseFile());
+
+        BusinessProfile businessProfile = BusinessProfile.create(
+                user,
+                businessRegistrationNumber,
+                request.companyName().trim(),
+                request.representativeName().trim(),
+                request.representativePhone().trim(),
+                request.companyAddress().trim(),
+                request.businessType().trim(),
+                request.openingDate(),
+                request.taxType().trim(),
+                request.businessCategory().trim(),
+                request.businessItem().trim(),
+                storedFile.originalFileName(),
+                storedFile.storedFileName(),
+                storedFile.filePath(),
+                storedFile.contentType(),
+                storedFile.fileSize()
+        );
+
+        businessProfileRepository.save(businessProfile);
+        user.changeToPendingApproval();
+
+        return RegisterStepTwoResponse.of(
+                user.getId(),
+                businessProfile.getId(),
+                user.getStatus()
+        );
     }
 
     private void validateRegisterStepOne(RegisterStepOneRequest request, String email, String studentId) {
