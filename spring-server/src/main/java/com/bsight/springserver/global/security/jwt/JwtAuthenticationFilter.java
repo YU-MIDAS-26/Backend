@@ -1,10 +1,12 @@
 package com.bsight.springserver.global.security.jwt;
 
+import com.bsight.springserver.domain.auth.repository.JwtBlacklistTokenRepository;
+import com.bsight.springserver.global.exception.CustomException;
+import com.bsight.springserver.global.exception.ErrorCode;
 import com.bsight.springserver.global.response.ApiResponse;
 import com.bsight.springserver.global.security.auth.CustomUserDetails;
 import com.bsight.springserver.global.security.auth.CustomUserDetailsService;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.bsight.springserver.global.exception.CustomException;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
@@ -27,6 +29,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final CustomUserDetailsService customUserDetailsService;
+    private final JwtBlacklistTokenRepository jwtBlacklistTokenRepository;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -39,6 +42,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             if (token != null) {
+                if (jwtBlacklistTokenRepository.existsByToken(token)) {
+                    throw new CustomException(ErrorCode.ALREADY_LOGGED_OUT);
+                }
+
                 jwtTokenProvider.validateToken(token);
 
                 Long userId = jwtTokenProvider.getUserId(token);
