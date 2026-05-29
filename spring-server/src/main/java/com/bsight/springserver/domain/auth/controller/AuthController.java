@@ -2,10 +2,12 @@ package com.bsight.springserver.domain.auth.controller;
 
 import com.bsight.springserver.domain.auth.dto.request.EmailVerificationConfirmRequest;
 import com.bsight.springserver.domain.auth.dto.request.EmailVerificationRequest;
+import com.bsight.springserver.domain.auth.dto.request.LoginRequest;
 import com.bsight.springserver.domain.auth.dto.request.RegisterStepOneRequest;
 import com.bsight.springserver.domain.auth.dto.request.RegisterStepTwoRequest;
 import com.bsight.springserver.domain.auth.dto.request.StudentIdCheckRequest;
 import com.bsight.springserver.domain.auth.dto.response.AuthMessageResponse;
+import com.bsight.springserver.domain.auth.dto.response.LoginResponse;
 import com.bsight.springserver.domain.auth.dto.response.RegisterStepTwoResponse;
 import com.bsight.springserver.domain.auth.service.AuthService;
 import com.bsight.springserver.global.response.ApiResponse;
@@ -68,5 +70,14 @@ public class AuthController {
     ) {
         RegisterStepTwoResponse response = authService.registerStepTwo(request);
         return ApiResponse.success("사업자 정보가 제출되었습니다.", response);
+    }
+
+    @Operation(summary = "로그인")
+    @PostMapping("/login")
+    public ApiResponse<LoginResponse> login(
+            @Valid @RequestBody LoginRequest request
+    ) {
+        LoginResponse response = authService.login(request);
+        return ApiResponse.success("로그인에 성공했습니다.", response);
     }
 }
