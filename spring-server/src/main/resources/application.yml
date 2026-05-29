@@ -53,3 +53,5 @@ naver:
 app:
   mail:
     from: ${MAIL_FROM:${MAIL_USERNAME}}
+  file:
+    business-license-upload-dir: ${BUSINESS_LICENSE_UPLOAD_DIR:uploads/business-licenses}
