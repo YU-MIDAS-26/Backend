@@ -1,6 +1,8 @@
 package com.bsight.springserver.domain.user.entity;
 
 import com.bsight.springserver.common.entity.BaseEntity;
+import com.bsight.springserver.global.exception.CustomException;
+import com.bsight.springserver.global.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -49,6 +51,10 @@ public class User extends BaseEntity {
     private Boolean agreedToTerms2;
 
     @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private UserRole role;
+
+    @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 30)
     private UserStatus status;
 
@@ -71,8 +77,25 @@ public class User extends BaseEntity {
         user.password = encodedPassword;
         user.agreedToTerms1 = agreedToTerms1;
         user.agreedToTerms2 = agreedToTerms2;
+        user.role = UserRole.USER;
         user.status = UserStatus.PENDING_BUSINESS;
 
         return user;
+    }
+
+    public void changeToPendingApproval() {
+        if (this.status != UserStatus.PENDING_BUSINESS) {
+            throw new CustomException(ErrorCode.INVALID_USER_STATUS);
+        }
+
+        this.status = UserStatus.PENDING_APPROVAL;
+    }
+
+    public void approve() {
+        this.status = UserStatus.ACTIVE;
+    }
+
+    public void delete() {
+        this.status = UserStatus.DELETED;
     }
 }
