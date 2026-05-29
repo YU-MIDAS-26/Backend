@@ -28,3 +28,7 @@ kamis :
 naver :
     shopping :
         search-url : https://openapi.naver.com/v1/search/shop.json
+
+# ===== OpenAI - 비시크릿 (api-key는 application-local.yml) =====
+openai :
+    model : gpt-4o-mini

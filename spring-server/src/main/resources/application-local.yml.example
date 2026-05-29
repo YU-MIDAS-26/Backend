@@ -29,6 +29,10 @@ naver:
   client-id: your-naver-client-id
   client-secret: your-naver-client-secret
 
+# ===== OpenAI (시크릿) =====
+openai:
+  api-key: your-openai-api-key
+
 # ===== Logging =====
 logging:
   level:
