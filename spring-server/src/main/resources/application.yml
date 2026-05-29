@@ -14,6 +14,18 @@ spring:
         format_sql: true
         dialect: org.hibernate.dialect.MySQLDialect
 
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
   application:
     name: spring-server
 
@@ -37,3 +49,7 @@ naver:
   client-secret: ${NAVER_CLIENT_SECRET}
   shopping:
     search-url: https://openapi.naver.com/v1/search/shop.json
+
+app:
+  mail:
+    from: ${MAIL_FROM:${MAIL_USERNAME}}
