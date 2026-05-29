@@ -5,7 +5,7 @@ public record LogoutResponse(
         String message
 ) {
 
-    public static LogoutResponse success() {
+    public static LogoutResponse loggedOut() {
         return new LogoutResponse(true, "로그아웃이 완료되었습니다.");
     }
 }
