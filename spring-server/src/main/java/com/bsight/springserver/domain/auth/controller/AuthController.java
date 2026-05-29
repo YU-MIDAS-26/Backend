@@ -3,12 +3,16 @@ package com.bsight.springserver.domain.auth.controller;
 import com.bsight.springserver.domain.auth.dto.request.EmailVerificationConfirmRequest;
 import com.bsight.springserver.domain.auth.dto.request.EmailVerificationRequest;
 import com.bsight.springserver.domain.auth.dto.request.RegisterStepOneRequest;
+import com.bsight.springserver.domain.auth.dto.request.RegisterStepTwoRequest;
 import com.bsight.springserver.domain.auth.dto.request.StudentIdCheckRequest;
 import com.bsight.springserver.domain.auth.dto.response.AuthMessageResponse;
+import com.bsight.springserver.domain.auth.dto.response.RegisterStepTwoResponse;
 import com.bsight.springserver.domain.auth.service.AuthService;
+import com.bsight.springserver.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -52,5 +56,17 @@ public class AuthController {
     ) {
         authService.registerStepOne(request);
         return AuthMessageResponse.success("1단계 정보가 저장되었습니다.");
+    }
+
+    @Operation(summary = "회원가입 2단계 사업자 정보 저장")
+    @PostMapping(
+            value = "/register/step-two",
+            consumes = MediaType.MULTIPART_FORM_DATA_VALUE
+    )
+    public ApiResponse<RegisterStepTwoResponse> registerStepTwo(
+            @Valid @ModelAttribute RegisterStepTwoRequest request
+    ) {
+        RegisterStepTwoResponse response = authService.registerStepTwo(request);
+        return ApiResponse.success("사업자 정보가 제출되었습니다.", response);
     }
 }
