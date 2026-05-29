@@ -2,9 +2,11 @@ package com.bsight.springserver.domain.auth.service;
 
 import com.bsight.springserver.domain.auth.dto.request.EmailVerificationConfirmRequest;
 import com.bsight.springserver.domain.auth.dto.request.EmailVerificationRequest;
+import com.bsight.springserver.domain.auth.dto.request.LoginRequest;
 import com.bsight.springserver.domain.auth.dto.request.RegisterStepOneRequest;
 import com.bsight.springserver.domain.auth.dto.request.RegisterStepTwoRequest;
 import com.bsight.springserver.domain.auth.dto.request.StudentIdCheckRequest;
+import com.bsight.springserver.domain.auth.dto.response.LoginResponse;
 import com.bsight.springserver.domain.auth.dto.response.RegisterStepTwoResponse;
 import com.bsight.springserver.domain.auth.entity.EmailVerification;
 import com.bsight.springserver.domain.auth.repository.EmailVerificationRepository;
@@ -17,6 +19,7 @@ import com.bsight.springserver.domain.user.entity.UserStatus;
 import com.bsight.springserver.domain.user.repository.UserRepository;
 import com.bsight.springserver.global.exception.CustomException;
 import com.bsight.springserver.global.exception.ErrorCode;
+import com.bsight.springserver.global.security.jwt.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -40,6 +43,7 @@ public class AuthService {
     private final BusinessLicenseFileStorageService businessLicenseFileStorageService;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
+    private final JwtTokenProvider jwtTokenProvider;
 
     @Transactional
     public void requestEmailVerificationCode(EmailVerificationRequest request) {
@@ -160,6 +164,27 @@ public class AuthService {
                 user.getId(),
                 businessProfile.getId(),
                 user.getStatus()
+        );
+    }
+
+    public LoginResponse login(LoginRequest request) {
+        User user = userRepository.findByStudentIdAndStatusNot(request.studentId().trim(), UserStatus.DELETED)
+                .orElseThrow(() -> new CustomException(ErrorCode.INVALID_LOGIN));
+
+        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+            throw new CustomException(ErrorCode.INVALID_LOGIN);
+        }
+
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new CustomException(ErrorCode.LOGIN_NOT_ALLOWED);
+        }
+
+        String accessToken = jwtTokenProvider.createAccessToken(user);
+
+        return LoginResponse.of(
+                accessToken,
+                jwtTokenProvider.getExpiration(),
+                user
         );
     }
 
