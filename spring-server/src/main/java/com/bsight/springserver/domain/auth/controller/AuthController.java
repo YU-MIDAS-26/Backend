@@ -11,6 +11,8 @@ import com.bsight.springserver.domain.auth.dto.response.LoginResponse;
 import com.bsight.springserver.domain.auth.dto.response.RegisterStepTwoResponse;
 import com.bsight.springserver.domain.auth.service.AuthService;
 import com.bsight.springserver.global.response.ApiResponse;
+import com.bsight.springserver.domain.auth.dto.response.LogoutResponse;
+import org.springframework.http.HttpHeaders;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -79,5 +81,14 @@ public class AuthController {
     ) {
         LoginResponse response = authService.login(request);
         return ApiResponse.success("로그인에 성공했습니다.", response);
+    }
+
+    @Operation(summary = "로그아웃")
+    @PostMapping("/logout")
+    public ApiResponse<LogoutResponse> logout(
+            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorizationHeader
+    ) {
+        LogoutResponse response = authService.logout(authorizationHeader);
+        return ApiResponse.success("로그아웃이 완료되었습니다.", response);
     }
 }
