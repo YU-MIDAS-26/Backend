@@ -113,6 +113,10 @@ public class User extends BaseEntity {
         this.rejectionReason = rejectionReason;
     }
 
+    public void changePhoneNumber(String phoneNumber) {
+        this.phoneNumber = phoneNumber;
+    }
+
     public void changePassword(String encodedPassword) {
         this.password = encodedPassword;
     }
