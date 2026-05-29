@@ -3,19 +3,22 @@ package com.bsight.springserver.domain.auth.controller;
 import com.bsight.springserver.domain.auth.dto.request.EmailVerificationConfirmRequest;
 import com.bsight.springserver.domain.auth.dto.request.EmailVerificationRequest;
 import com.bsight.springserver.domain.auth.dto.request.LoginRequest;
+import com.bsight.springserver.domain.auth.dto.request.PasswordResetConfirmRequest;
+import com.bsight.springserver.domain.auth.dto.request.PasswordResetRequest;
 import com.bsight.springserver.domain.auth.dto.request.RegisterStepOneRequest;
 import com.bsight.springserver.domain.auth.dto.request.RegisterStepTwoRequest;
 import com.bsight.springserver.domain.auth.dto.request.StudentIdCheckRequest;
 import com.bsight.springserver.domain.auth.dto.response.AuthMessageResponse;
 import com.bsight.springserver.domain.auth.dto.response.LoginResponse;
+import com.bsight.springserver.domain.auth.dto.response.LogoutResponse;
+import com.bsight.springserver.domain.auth.dto.response.PasswordResetResponse;
 import com.bsight.springserver.domain.auth.dto.response.RegisterStepTwoResponse;
 import com.bsight.springserver.domain.auth.service.AuthService;
 import com.bsight.springserver.global.response.ApiResponse;
-import com.bsight.springserver.domain.auth.dto.response.LogoutResponse;
-import org.springframework.http.HttpHeaders;
 import io.swagger.v3.oas.annotations.Operation;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 
@@ -90,5 +93,23 @@ public class AuthController {
     ) {
         LogoutResponse response = authService.logout(authorizationHeader);
         return ApiResponse.success("로그아웃이 완료되었습니다.", response);
+    }
+
+    @Operation(summary = "비밀번호 재설정 링크 요청")
+    @PostMapping("/password-reset/request")
+    public ApiResponse<PasswordResetResponse> requestPasswordReset(
+            @Valid @RequestBody PasswordResetRequest request
+    ) {
+        PasswordResetResponse response = authService.requestPasswordReset(request);
+        return ApiResponse.success("비밀번호 재설정 링크를 이메일로 전송했습니다.", response);
+    }
+
+    @Operation(summary = "새 비밀번호 변경")
+    @PostMapping("/password-reset/confirm")
+    public ApiResponse<PasswordResetResponse> confirmPasswordReset(
+            @Valid @RequestBody PasswordResetConfirmRequest request
+    ) {
+        PasswordResetResponse response = authService.confirmPasswordReset(request);
+        return ApiResponse.success("비밀번호가 변경되었습니다.", response);
     }
 }
