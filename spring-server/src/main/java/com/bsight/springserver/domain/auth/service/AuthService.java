@@ -7,11 +7,11 @@ import com.bsight.springserver.domain.auth.dto.request.RegisterStepOneRequest;
 import com.bsight.springserver.domain.auth.dto.request.RegisterStepTwoRequest;
 import com.bsight.springserver.domain.auth.dto.request.StudentIdCheckRequest;
 import com.bsight.springserver.domain.auth.dto.response.LoginResponse;
+import com.bsight.springserver.domain.auth.dto.response.LogoutResponse;
 import com.bsight.springserver.domain.auth.dto.response.RegisterStepTwoResponse;
 import com.bsight.springserver.domain.auth.entity.EmailVerification;
-import com.bsight.springserver.domain.auth.repository.EmailVerificationRepository;
-import com.bsight.springserver.domain.auth.dto.response.LogoutResponse;
 import com.bsight.springserver.domain.auth.entity.JwtBlacklistToken;
+import com.bsight.springserver.domain.auth.repository.EmailVerificationRepository;
 import com.bsight.springserver.domain.auth.repository.JwtBlacklistTokenRepository;
 import com.bsight.springserver.domain.business.entity.BusinessProfile;
 import com.bsight.springserver.domain.business.repository.BusinessProfileRepository;
@@ -37,6 +37,7 @@ import java.time.LocalDateTime;
 public class AuthService {
 
     private static final int EMAIL_VERIFICATION_EXPIRE_MINUTES = 5;
+    private static final String BEARER_PREFIX = "Bearer ";
 
     private final SecureRandom secureRandom = new SecureRandom();
 
@@ -44,10 +45,10 @@ public class AuthService {
     private final EmailVerificationRepository emailVerificationRepository;
     private final BusinessProfileRepository businessProfileRepository;
     private final BusinessLicenseFileStorageService businessLicenseFileStorageService;
+    private final JwtBlacklistTokenRepository jwtBlacklistTokenRepository;
     private final PasswordEncoder passwordEncoder;
     private final MailService mailService;
     private final JwtTokenProvider jwtTokenProvider;
-    private final JwtBlacklistTokenRepository jwtBlacklistTokenRepository;
 
     @Transactional
     public void requestEmailVerificationCode(EmailVerificationRequest request) {
@@ -192,6 +193,26 @@ public class AuthService {
         );
     }
 
+    @Transactional
+    public LogoutResponse logout(String authorizationHeader) {
+        String token = extractAccessToken(authorizationHeader);
+
+        jwtTokenProvider.validateToken(token);
+
+        if (jwtBlacklistTokenRepository.existsByToken(token)) {
+            throw new CustomException(ErrorCode.ALREADY_LOGGED_OUT);
+        }
+
+        JwtBlacklistToken blacklistToken = JwtBlacklistToken.create(
+                token,
+                jwtTokenProvider.getTokenExpiresAt(token)
+        );
+
+        jwtBlacklistTokenRepository.save(blacklistToken);
+
+        return LogoutResponse.loggedOut();
+    }
+
     private void validateRegisterStepOne(RegisterStepOneRequest request, String email, String studentId) {
         if (!request.password().equals(request.passwordConfirm())) {
             throw new CustomException(ErrorCode.PASSWORD_CONFIRM_NOT_MATCHED);
@@ -226,35 +247,15 @@ public class AuthService {
         }
     }
 
-    private String generateVerificationCode() {
-        return String.format("%06d", secureRandom.nextInt(1_000_000));
-    }
-
-    @Transactional
-    public LogoutResponse logout(String authorizationHeader) {
-        String token = extractAccessToken(authorizationHeader);
-
-        jwtTokenProvider.validateToken(token);
-
-        if (jwtBlacklistTokenRepository.existsByToken(token)) {
-            throw new CustomException(ErrorCode.ALREADY_LOGGED_OUT);
-        }
-
-        JwtBlacklistToken blacklistToken = JwtBlacklistToken.create(
-                token,
-                jwtTokenProvider.getTokenExpiresAt(token)
-        );
-
-        jwtBlacklistTokenRepository.save(blacklistToken);
-
-        return LogoutResponse.success();
-    }
-
     private String extractAccessToken(String authorizationHeader) {
-        if (authorizationHeader == null || !authorizationHeader.startsWith("Bearer ")) {
+        if (authorizationHeader == null || !authorizationHeader.startsWith(BEARER_PREFIX)) {
             throw new CustomException(ErrorCode.TOKEN_REQUIRED);
         }
 
-        return authorizationHeader.substring(7);
+        return authorizationHeader.substring(BEARER_PREFIX.length());
+    }
+
+    private String generateVerificationCode() {
+        return String.format("%06d", secureRandom.nextInt(1_000_000));
     }
 }
