@@ -22,25 +22,25 @@ dependencies {
     // Web & Validation
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
-    implementation 'org.springframework.boot:spring-boot-starter-webflux'        // ← 복원 (KAMIS·Naver WebClient)
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
 
     // Security & Auth (인증/JWT 모듈용)
-    implementation 'org.springframework.boot:spring-boot-starter-security'       // ← 복원
-    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'  // ← 복원
-    implementation 'org.thymeleaf.extras:thymeleaf-extras-springsecurity6'       // ← 복원
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
+    implementation 'org.thymeleaf.extras:thymeleaf-extras-springsecurity6'
 
     // Thymeleaf / Mail
-    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'      // ← 복원
-    implementation 'org.springframework.boot:spring-boot-starter-mail'           // ← 복원
+    implementation 'org.springframework.boot:spring-boot-starter-thymeleaf'
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
 
     // Database & Persistence
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'com.mysql:mysql-connector-j'
 
-    // JWT (인증 모듈용)
-    implementation 'io.jsonwebtoken:jjwt-api:0.13.0'                              // ← 복원
-    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'                                // ← 복원
-    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'                             // ← 복원
+    // JWT
+    implementation 'io.jsonwebtoken:jjwt-api:0.13.0'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.13.0'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.13.0'
 
     // Documentation (Swagger)
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.7.0'
@@ -52,8 +52,20 @@ dependencies {
 
     // Testing
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
-    testImplementation 'org.springframework.security:spring-security-test'        // ← 복원
+    testImplementation 'org.springframework.security:spring-security-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+
+    // Mail
+    implementation 'org.springframework.boot:spring-boot-starter-mail'
+
+    // Password Encoder
+    implementation 'org.springframework.security:spring-security-crypto'
+
+    // WebClient
+    implementation 'org.springframework.boot:spring-boot-starter-webflux'
+
+    // Security
+    implementation 'org.springframework.boot:spring-boot-starter-security'
 }
 
 tasks.named('test') {

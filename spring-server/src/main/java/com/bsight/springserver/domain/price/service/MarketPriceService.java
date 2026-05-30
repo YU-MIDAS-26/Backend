@@ -72,7 +72,7 @@ public class MarketPriceService {
         LocalDate today = LocalDate.now();
         String regday = today.format(DateTimeFormatter.ofPattern("yyyy-MM-dd"));
 
-        String uri = UriComponentsBuilder.fromHttpUrl(baseUrl)
+        String uri = UriComponentsBuilder.fromUriString(baseUrl)
                 .queryParam("action", "dailyPriceByCategoryList")
                 .queryParam("p_cert_key", certKey)
                 .queryParam("p_cert_id", certId)
