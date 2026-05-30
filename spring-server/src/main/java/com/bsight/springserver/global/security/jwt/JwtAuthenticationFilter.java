@@ -16,9 +16,11 @@ import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+import org.springframework.util.AntPathMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.List;
 
 @Component
 @RequiredArgsConstructor
@@ -27,10 +29,36 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private static final String AUTHORIZATION_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
 
+    private static final List<String> EXCLUDED_PATHS = List.of(
+            "/swagger-ui.html",
+            "/swagger-ui/**",
+            "/v3/api-docs/**",
+            "/v3/api-docs.yaml",
+
+            "/api/auth/email/request",
+            "/api/auth/email/verify",
+            "/api/auth/student-id/check",
+            "/api/auth/register/step-one",
+            "/api/auth/register/step-two",
+            "/api/auth/login",
+            "/api/auth/password-reset/request",
+            "/api/auth/password-reset/confirm"
+    );
+
     private final JwtTokenProvider jwtTokenProvider;
     private final CustomUserDetailsService customUserDetailsService;
     private final JwtBlacklistTokenRepository jwtBlacklistTokenRepository;
     private final ObjectMapper objectMapper;
+
+    private final AntPathMatcher pathMatcher = new AntPathMatcher();
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        String requestUri = request.getRequestURI();
+
+        return EXCLUDED_PATHS.stream()
+                .anyMatch(pattern -> pathMatcher.match(pattern, requestUri));
+    }
 
     @Override
     protected void doFilterInternal(
