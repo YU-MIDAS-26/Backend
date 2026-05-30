@@ -52,6 +52,12 @@ public enum ErrorCode {
     EMPLOYEE_NOT_FOUND(HttpStatus.NOT_FOUND, "직원을 찾을 수 없습니다."),
     EMPLOYEE_NUMBER_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 등록된 사원번호입니다."),
 
+    ATTENDANCE_NOT_FOUND(HttpStatus.NOT_FOUND, "근무 기록을 찾을 수 없습니다."),
+    ATTENDANCE_ALREADY_EXISTS(HttpStatus.CONFLICT, "해당 날짜에 이미 등록된 직원 근무 기록이 있습니다."),
+    INVALID_WORK_TIME(HttpStatus.BAD_REQUEST, "퇴근 시간은 출근 시간보다 늦어야 합니다."),
+    INVALID_BREAK_TIME(HttpStatus.BAD_REQUEST, "휴게시간은 출근 시간과 퇴근 시간 사이여야 합니다."),
+    BREAK_TIME_REQUIRED(HttpStatus.BAD_REQUEST, "휴게시간 적용 시 시작 시간과 종료 시간을 모두 입력해야 합니다."),
+
     INGREDIENT_NOT_FOUND(HttpStatus.NOT_FOUND, "재료를 찾을 수 없습니다."),
     INGREDIENT_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 등록된 재료입니다."),
 
