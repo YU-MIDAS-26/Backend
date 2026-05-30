@@ -68,5 +68,5 @@ app:
     url: ${PASSWORD_RESET_URL:http://localhost:5173/password-reset}
 
 jwt:
-  secret: ${JWT_SECRET:bsight-local-jwt-secret-key-for-development-2026-very-long-secret}
-  expiration: ${JWT_EXPIRATION:86400000}
+  secret: c3ByaW5nLWJvb3Qtc2VjdXJpdHktand0LXRva2VuLWdlbmVyYXRvci1zZWNyZXQta2V5LXByb2plY3QtYnNpZ2h0
+  expiration: 86400000
