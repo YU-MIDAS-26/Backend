@@ -1,5 +1,6 @@
 package com.bsight.springserver.domain.finance.service;
 
+import com.bsight.springserver.common.enums.CycleType;
 import com.bsight.springserver.domain.cost.entity.FixedCost;
 import com.bsight.springserver.domain.cost.entity.VariableCost;
 import com.bsight.springserver.domain.cost.repository.FixedCostRepository;
@@ -18,12 +19,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * 매출과 지출 데이터를 통합하여 금융 지표 및 AI 인사이트를 생성하는 서비스
+ * Service that aggregates sales/cost data for finance dashboard and AI insights.
  */
 @Service
 @Transactional(readOnly = true)
@@ -37,7 +40,9 @@ public class FinanceService {
     private final ObjectMapper objectMapper;
 
     /**
-     * 월별 캘린더용 날짜별 손익 데이터를 생성합니다.
+     * Builds day-by-day calendar data for a given month.
+     * - Sales: latest DAILY/HOURLY record per day
+     * - Variable cost: latest DAILY record per day
      */
     public List<CalendarDailyResponse> getCalendarData(String yearMonthStr) {
         YearMonth yearMonth = YearMonth.parse(yearMonthStr);
@@ -45,27 +50,39 @@ public class FinanceService {
         LocalDate end = yearMonth.atEndOfMonth();
         int daysInMonth = yearMonth.lengthOfMonth();
 
-        // 1. 해당 월의 모든 데이터 조회
-        List<Sales> salesList = salesRepository.findAll().stream() // 실무에선 쿼리로 기간 필터링 권장
+        List<Sales> salesList = salesRepository.findAll().stream()
                 .filter(s -> !s.getSaleDate().isBefore(start) && !s.getSaleDate().isAfter(end))
-                .collect(Collectors.toList());
-        
-        List<VariableCost> variableCosts = variableCostRepository.findByCostDateBetween(start, end);
-        
+                .filter(s -> isFinanceSalesCycle(s.getCycleType()))
+                .toList();
+
+        List<VariableCost> variableCosts = variableCostRepository.findByCostDateBetween(start, end).stream()
+                .filter(variableCost -> variableCost.getCycleType() == CycleType.DAILY)
+                .toList();
+
         FixedCost fixedCostEntity = fixedCostRepository.findByTargetYearMonth(yearMonthStr).orElse(null);
         long dailyFixedCost = (fixedCostEntity != null) ? (fixedCostEntity.getTotalCost() / daysInMonth) : 0L;
 
-        // 2. 날짜별로 맵핑 (성능 최적화)
-        Map<LocalDate, Long> salesMap = salesList.stream().collect(Collectors.groupingBy(Sales::getSaleDate, Collectors.summingLong(Sales::getTotalAmount)));
-        Map<LocalDate, Long> varCostMap = variableCosts.stream().collect(Collectors.groupingBy(VariableCost::getCostDate, Collectors.summingLong(VariableCost::getTotalCost)));
+        Map<LocalDate, Sales> latestSalesByDate = salesList.stream()
+                .collect(Collectors.toMap(
+                        Sales::getSaleDate,
+                        Function.identity(),
+                        this::pickLatestSales
+                ));
 
-        // 3. 한 달치 리스트 생성
+        Map<LocalDate, VariableCost> latestVariableCostByDate = variableCosts.stream()
+                .collect(Collectors.toMap(
+                        VariableCost::getCostDate,
+                        Function.identity(),
+                        this::pickLatestVariableCost
+                ));
+
         List<CalendarDailyResponse> result = new ArrayList<>();
         for (int i = 1; i <= daysInMonth; i++) {
             LocalDate date = yearMonth.atDay(i);
-            long sales = salesMap.getOrDefault(date, 0L);
-            long expense = varCostMap.getOrDefault(date, 0L) + dailyFixedCost;
-            
+            long sales = latestSalesByDate.containsKey(date) ? latestSalesByDate.get(date).getTotalAmount() : 0L;
+            long variableCost = latestVariableCostByDate.containsKey(date) ? latestVariableCostByDate.get(date).getTotalCost() : 0L;
+            long expense = variableCost + dailyFixedCost;
+
             result.add(CalendarDailyResponse.builder()
                     .date(date)
                     .dailySales(sales)
@@ -77,28 +94,35 @@ public class FinanceService {
     }
 
     /**
-     * 특정 날짜의 상세 지표를 조회합니다.
+     * Returns detailed finance values for a single day.
      */
     public DailyDetailResponse getDailyDetail(LocalDate date) {
         YearMonth yearMonth = YearMonth.from(date);
         String yearMonthStr = yearMonth.toString();
-        
-        // 데이터 조회
-        Sales sales = salesRepository.findBySaleDate(date).orElse(null);
-        List<VariableCost> varCosts = variableCostRepository.findByCostDateBetween(date, date);
+
+        Sales sales = salesRepository.findAllBySaleDate(date).stream()
+                .filter(s -> isFinanceSalesCycle(s.getCycleType()))
+                .max(latestUpdatedSalesComparator())
+                .orElse(null);
+
+        VariableCost variableCostEntity = variableCostRepository.findByCostDateBetween(date, date).stream()
+                .filter(variableCost -> variableCost.getCycleType() == CycleType.DAILY)
+                .max(latestUpdatedVariableCostComparator())
+                .orElse(null);
+
         FixedCost fixedCostEntity = fixedCostRepository.findByTargetYearMonth(yearMonthStr).orElse(null);
-        
+
         long totalSales = (sales != null) ? sales.getTotalAmount() : 0L;
-        long variableCost = varCosts.stream().mapToLong(VariableCost::getTotalCost).sum();
+        long variableCost = (variableCostEntity != null) ? variableCostEntity.getTotalCost() : 0L;
         long fixedCost = (fixedCostEntity != null) ? (fixedCostEntity.getTotalCost() / yearMonth.lengthOfMonth()) : 0L;
         long totalExpense = variableCost + fixedCost;
 
-        // 시간대별 매출 가공
         List<DailyDetailResponse.HourlySalesDetail> hourlyDetails = new ArrayList<>();
-        if (sales != null && !sales.getHourlySales().isEmpty()) {
+        if (sales != null && sales.getCycleType() == CycleType.HOURLY && !sales.getHourlySales().isEmpty()) {
             hourlyDetails = sales.getHourlySales().stream()
+                    .sorted(Comparator.comparing(h -> h.getSaleHour()))
                     .map(h -> DailyDetailResponse.HourlySalesDetail.builder().hour(h.getSaleHour()).amount(h.getAmount()).build())
-                    .collect(Collectors.toList());
+                    .toList();
         }
 
         return DailyDetailResponse.builder()
@@ -112,44 +136,59 @@ public class FinanceService {
     }
 
     /**
-     * AI 경영 인사이트 데이터를 생성합니다.
-     * 실제 DB의 매출/지출 데이터를 기반으로 OpenAI LLM을 호출하여 실시간 분석을 수행합니다.
+     * Builds monthly AI insight payload using latest record per day.
      */
     public AiInsightResponse getAiInsight(String yearMonthStr) {
         YearMonth yearMonth = YearMonth.parse(yearMonthStr);
         LocalDate start = yearMonth.atDay(1);
         LocalDate end = yearMonth.atEndOfMonth();
 
-        // 1. 데이터 수집
         List<Sales> salesList = salesRepository.findAll().stream()
                 .filter(s -> !s.getSaleDate().isBefore(start) && !s.getSaleDate().isAfter(end))
+                .filter(s -> isFinanceSalesCycle(s.getCycleType()))
                 .toList();
-        List<VariableCost> variableCosts = variableCostRepository.findByCostDateBetween(start, end);
+
+        List<VariableCost> variableCosts = variableCostRepository.findByCostDateBetween(start, end).stream()
+                .filter(variableCost -> variableCost.getCycleType() == CycleType.DAILY)
+                .toList();
+
         FixedCost fixedCost = fixedCostRepository.findByTargetYearMonth(yearMonthStr).orElse(null);
 
-        long totalSales = salesList.stream().mapToLong(Sales::getTotalAmount).sum();
-        long totalVarCost = variableCosts.stream().mapToLong(VariableCost::getTotalCost).sum();
+        Map<LocalDate, Sales> latestSalesByDate = salesList.stream()
+                .collect(Collectors.toMap(
+                        Sales::getSaleDate,
+                        Function.identity(),
+                        this::pickLatestSales
+                ));
+
+        Map<LocalDate, VariableCost> latestVariableCostByDate = variableCosts.stream()
+                .collect(Collectors.toMap(
+                        VariableCost::getCostDate,
+                        Function.identity(),
+                        this::pickLatestVariableCost
+                ));
+
+        long totalSales = latestSalesByDate.values().stream().mapToLong(Sales::getTotalAmount).sum();
+        long totalVarCost = latestVariableCostByDate.values().stream().mapToLong(VariableCost::getTotalCost).sum();
         long totalFixedCost = (fixedCost != null) ? fixedCost.getTotalCost() : 0L;
         long totalExpense = totalVarCost + totalFixedCost;
         long netProfit = totalSales - totalExpense;
 
-        // 2. AI 분석 프롬프트 생성 (5대 항목 서술형 명시)
         String prompt = String.format(
-            "너는 전문 경영 컨설턴트야. 다음 가게 데이터(%s)를 분석해서 사장님에게 전문적인 조언을 담은 JSON으로 답해줘.\n" +
-            "데이터:\n- 총 매출: %d원\n- 총 지출: %d원\n- 순이익: %d원\n\n" +
-            "JSON 형식 (반드시 모든 필드는 한국어 서술형 문장으로 채울 것):\n" +
-            "{\n" +
-            "  \"coreSummary\": \"전체 경영 상태를 관통하는 핵심 요약 한 문장\",\n" +
-            "  \"financeSummary\": \"이번 달 매출, 지출, 순이익 데이터를 분석한 종합 재무 분석 문구\",\n" +
-            "  \"recommendations\": [\"사장님이 당장 실행해야 할 추천 사항 1\", \"...\", \"...\", \"...\", \"추천 사항 5\"],\n" +
-            "  \"salesFlow\": \"매출의 시간적/데이터적 흐름에 대한 짧은 분석 요약\",\n" +
-            "  \"additionalInsight\": \"전월 대비 비교나 향후 전망 등 추가 인사이트\"\n" +
-            "}\n" +
-            "recommendations 리스트는 반드시 정확히 5개 항목이어야 해.",
-            yearMonthStr, totalSales, totalExpense, netProfit
+                "You are a senior business consultant. Analyze the monthly store data (%s) and return only JSON.%n" +
+                        "Data:%n- Total Sales: %d%n- Total Expense: %d%n- Net Profit: %d%n%n" +
+                        "Required JSON schema:%n" +
+                        "{%n" +
+                        "  \"coreSummary\": \"One-sentence executive summary\",%n" +
+                        "  \"financeSummary\": \"Financial interpretation of sales/expense/profit\",%n" +
+                        "  \"recommendations\": [\"Action 1\", \"Action 2\", \"Action 3\", \"Action 4\", \"Action 5\"],%n" +
+                        "  \"salesFlow\": \"Short analysis of sales trend\",%n" +
+                        "  \"additionalInsight\": \"Any additional forecast or comparison\"%n" +
+                        "}%n" +
+                        "The recommendations array must contain exactly 5 items.",
+                yearMonthStr, totalSales, totalExpense, netProfit
         );
 
-        // 3. AI 호출 및 결과 처리
         try {
             String aiResponse = openAiClient.chat(prompt);
             if (aiResponse != null) {
@@ -161,19 +200,42 @@ public class FinanceService {
         return getMockInsight();
     }
 
+    private Sales pickLatestSales(Sales left, Sales right) {
+        return latestUpdatedSalesComparator().compare(left, right) >= 0 ? left : right;
+    }
+
+    private VariableCost pickLatestVariableCost(VariableCost left, VariableCost right) {
+        return latestUpdatedVariableCostComparator().compare(left, right) >= 0 ? left : right;
+    }
+
+    private boolean isFinanceSalesCycle(CycleType cycleType) {
+        return cycleType == CycleType.DAILY || cycleType == CycleType.HOURLY;
+    }
+
+    private Comparator<Sales> latestUpdatedSalesComparator() {
+        return Comparator.comparing(Sales::getUpdatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(Sales::getId, Comparator.nullsLast(Comparator.naturalOrder()));
+    }
+
+    private Comparator<VariableCost> latestUpdatedVariableCostComparator() {
+        return Comparator.comparing(VariableCost::getUpdatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
+                .thenComparing(VariableCost::getId, Comparator.nullsLast(Comparator.naturalOrder()));
+    }
+
     private AiInsightResponse getMockInsight() {
         return AiInsightResponse.builder()
-                .coreSummary("현재 AI 분석 서버 연결을 확인 중입니다.")
-                .financeSummary("이번 달은 안정적인 매출을 기록했으나, 고정비 비중이 다소 높아 수익성 개선이 필요해 보입니다.")
+                .coreSummary("AI insight service fallback response.")
+                .financeSummary("Stable sales trend with room to improve fixed-cost efficiency.")
                 .recommendations(List.of(
-                    "피크 타임 매출 극대화를 위한 효율적인 인력 배치를 고려하세요.",
-                    "재료비 절감을 위해 주재료의 구매 단가를 재협상해 보세요.",
-                    "에너지 소비 효율을 높여 고정 공과금을 절약하세요.",
-                    "단골 고객을 위한 소규모 이벤트를 기획하여 방문 빈도를 높이세요.",
-                    "인기 메뉴 중심의 세트 구성을 통해 객단가를 높여보세요."
+                        "Optimize staffing around peak hours.",
+                        "Renegotiate major ingredient purchase prices.",
+                        "Reduce utility waste through operational checks.",
+                        "Run retention events for repeat customers.",
+                        "Promote high-margin bundle menus."
                 ))
-                .salesFlow("주말 매출이 전체의 50% 이상을 차지하며 특정 요일 편중 현상이 있습니다.")
-                .additionalInsight("다음 달은 지역 축제가 예정되어 있어 매출 상승이 기대됩니다.")
+                .salesFlow("Weekend concentration appears stronger than weekdays.")
+                .additionalInsight("Seasonal events next month may lift demand.")
                 .build();
     }
 }
+

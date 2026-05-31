@@ -49,4 +49,14 @@ public class Sales extends BaseTimeEntity {
         this.hourlySales.add(hourlySale);
         hourlySale.setSales(this);
     }
+
+    public void update(LocalDate saleDate, CycleType cycleType, Long totalAmount) {
+        this.saleDate = saleDate;
+        this.cycleType = cycleType;
+        this.totalAmount = totalAmount;
+    }
+
+    public void clearHourlySales() {
+        this.hourlySales.clear();
+    }
 }

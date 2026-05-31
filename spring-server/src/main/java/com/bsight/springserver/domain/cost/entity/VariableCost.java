@@ -53,4 +53,12 @@ public class VariableCost extends BaseTimeEntity {
         this.salaryCost = salaryCost;
         this.totalCost = ingredientCost + salaryCost;
     }
+
+    public void update(LocalDate costDate, CycleType cycleType, Long ingredientCost, Long salaryCost) {
+        this.costDate = costDate;
+        this.cycleType = cycleType;
+        this.ingredientCost = ingredientCost;
+        this.salaryCost = salaryCost;
+        this.totalCost = ingredientCost + salaryCost;
+    }
 }
