@@ -1,0 +1,22 @@
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: bsight-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpass
+      MYSQL_DATABASE: bsight
+      MYSQL_USER: midas
+      MYSQL_PASSWORD: 401040104010
+      TZ: Asia/Seoul
+    ports:
+      - "3306:3306"
+    volumes:
+      - bsight-data:/var/lib/mysql
+      - ./db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+
+volumes:
+  bsight-data:
