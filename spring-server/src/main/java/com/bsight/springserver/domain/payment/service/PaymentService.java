@@ -1,5 +1,6 @@
 package com.bsight.springserver.domain.payment.service;
 
+import com.bsight.springserver.domain.payment.dto.DailyStatsDto;
 import com.bsight.springserver.domain.payment.dto.PaymentRowDto;
 import com.bsight.springserver.domain.payment.dto.UploadResult;
 import com.bsight.springserver.domain.payment.entity.Channel;
@@ -19,6 +20,10 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.sql.Date;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -132,5 +137,37 @@ public class PaymentService {
                 .rowNumber(rowNumber)
                 .reason(reason)
                 .build();
+    }
+
+    /**
+     * 일별 매출 추이 조회
+     * - from/to 미입력 시 최근 30일 기본값
+     * - from은 00:00:00, to는 23:59:59까지 포함
+     */
+    @Transactional(readOnly = true)
+    public List<DailyStatsDto> getDailyStats(LocalDate from, LocalDate to) {
+        LocalDate effectiveTo = (to != null) ? to : LocalDate.now();
+        LocalDate effectiveFrom = (from != null) ? from : effectiveTo.minusDays(30);
+
+        LocalDateTime fromDt = effectiveFrom.atStartOfDay();
+        LocalDateTime toDt = effectiveTo.atTime(LocalTime.MAX);
+
+        return paymentRepository.findDailyStatsRaw(fromDt, toDt).stream()
+                .map(row -> DailyStatsDto.builder()
+                        .date(toLocalDate(row[0]))
+                        .amount(((Number) row[1]).longValue())
+                        .count(((Number) row[2]).longValue())
+                        .build())
+                .toList();
+    }
+
+    /**
+     * Native query DATE() 결과를 LocalDate로 안전하게 변환
+     * (드라이버/Hibernate 버전에 따라 java.sql.Date, LocalDate, String 중 하나로 반환됨)
+     */
+    private LocalDate toLocalDate(Object value) {
+        if (value instanceof LocalDate ld) return ld;
+        if (value instanceof Date d) return d.toLocalDate();
+        return LocalDate.parse(value.toString());
     }
 }

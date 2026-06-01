@@ -1,14 +1,19 @@
 package com.bsight.springserver.domain.payment.controller;
 
+import com.bsight.springserver.domain.payment.dto.DailyStatsDto;
 import com.bsight.springserver.domain.payment.dto.UploadResult;
 import com.bsight.springserver.domain.payment.service.PaymentService;
 import com.bsight.springserver.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.time.LocalDate;
+import java.util.List;
 
 @Tag(name = "Payment", description = "판매전표 (결제 거래) API")
 @RestController
@@ -26,5 +31,17 @@ public class PaymentController {
         return ApiResponse.success(
                 "판매전표 업로드가 완료되었습니다.",
                 paymentService.upload(file));
+    }
+
+    @Operation(summary = "일별 매출 추이",
+            description = "기간 내 날짜별 매출 합계/건수. from/to 미입력 시 최근 30일.")
+    @GetMapping("/stats/daily")
+    public ApiResponse<List<DailyStatsDto>> dailyStats(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ApiResponse.success(paymentService.getDailyStats(from, to));
     }
 }
