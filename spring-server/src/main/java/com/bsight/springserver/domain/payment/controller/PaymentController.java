@@ -1,6 +1,7 @@
 package com.bsight.springserver.domain.payment.controller;
 
 import com.bsight.springserver.domain.payment.dto.DailyStatsDto;
+import com.bsight.springserver.domain.payment.dto.HourlyHeatmapDto;
 import com.bsight.springserver.domain.payment.dto.UploadResult;
 import com.bsight.springserver.domain.payment.service.PaymentService;
 import com.bsight.springserver.global.response.ApiResponse;
@@ -43,5 +44,18 @@ public class PaymentController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         return ApiResponse.success(paymentService.getDailyStats(from, to));
+    }
+
+    @Operation(summary = "요일 x 시간대 매출 히트맵",
+            description = "기간 내 요일(1=월~7=일) × 시간대(0~23) 매출 합계/건수. " +
+                          "from/to 미입력 시 최근 30일. 거래 없는 셀은 응답에 미포함.")
+    @GetMapping("/stats/hourly-heatmap")
+    public ApiResponse<List<HourlyHeatmapDto>> hourlyHeatmap(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ApiResponse.success(paymentService.getHourlyHeatmap(from, to));
     }
 }

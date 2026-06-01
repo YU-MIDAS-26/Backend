@@ -1,6 +1,7 @@
 package com.bsight.springserver.domain.payment.service;
 
 import com.bsight.springserver.domain.payment.dto.DailyStatsDto;
+import com.bsight.springserver.domain.payment.dto.HourlyHeatmapDto;
 import com.bsight.springserver.domain.payment.dto.PaymentRowDto;
 import com.bsight.springserver.domain.payment.dto.UploadResult;
 import com.bsight.springserver.domain.payment.entity.Channel;
@@ -169,5 +170,36 @@ public class PaymentService {
         if (value instanceof LocalDate ld) return ld;
         if (value instanceof Date d) return d.toLocalDate();
         return LocalDate.parse(value.toString());
+    }
+
+    /**
+     * 요일 x 시간대 매출 히트맵 조회
+     * - from/to 미입력 시 최근 30일
+     * - 응답의 dayOfWeek: 1=월, 2=화, ..., 7=일 (한국 관습)
+     * - 빈 셀(거래 없는 요일x시간)은 응답에 포함되지 않음 — 프론트가 7x24 격자로 padding
+     */
+    @Transactional(readOnly = true)
+    public List<HourlyHeatmapDto> getHourlyHeatmap(LocalDate from, LocalDate to) {
+        LocalDate effectiveTo = (to != null) ? to : LocalDate.now();
+        LocalDate effectiveFrom = (from != null) ? from : effectiveTo.minusDays(30);
+
+        LocalDateTime fromDt = effectiveFrom.atStartOfDay();
+        LocalDateTime toDt = effectiveTo.atTime(LocalTime.MAX);
+
+        return paymentRepository.findHeatmapStatsRaw(fromDt, toDt).stream()
+                .map(row -> HourlyHeatmapDto.builder()
+                        .dayOfWeek(toKoreanDayOfWeek(((Number) row[0]).intValue()))
+                        .hour(((Number) row[1]).intValue())
+                        .amount(((Number) row[2]).longValue())
+                        .count(((Number) row[3]).longValue())
+                        .build())
+                .toList();
+    }
+
+    /**
+     * MySQL DAYOFWEEK(1=일, 2=월, ..., 7=토) → 한국 관습(1=월, ..., 7=일) 변환
+     */
+    private int toKoreanDayOfWeek(int mysqlDow) {
+        return mysqlDow == 1 ? 7 : mysqlDow - 1;
     }
 }
