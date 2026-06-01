@@ -64,7 +64,11 @@ public enum ErrorCode {
     PRICE_HISTORY_NOT_FOUND(HttpStatus.NOT_FOUND, "가격 이력을 찾을 수 없습니다."),
 
     NAVER_API_ERROR(HttpStatus.SERVICE_UNAVAILABLE, "네이버 쇼핑 API 호출에 실패했습니다."),
-    CRAWLING_ERROR(HttpStatus.SERVICE_UNAVAILABLE, "가격 정보 수집에 실패했습니다.");
+    CRAWLING_ERROR(HttpStatus.SERVICE_UNAVAILABLE, "가격 정보 수집에 실패했습니다."),
+
+    CSV_FILE_REQUIRED(HttpStatus.BAD_REQUEST, "CSV 파일이 필요합니다."),
+    INVALID_CSV_FORMAT(HttpStatus.BAD_REQUEST, "CSV 파일 형식이 올바르지 않습니다."),
+    CSV_PARSE_FAILED(HttpStatus.BAD_REQUEST, "CSV 파일 파싱에 실패했습니다.");
 
     private final HttpStatus httpStatus;
     private final String message;
