@@ -1,5 +1,6 @@
 package com.bsight.springserver.domain.payment.controller;
 
+import com.bsight.springserver.domain.payment.dto.ChannelBreakdownDto;
 import com.bsight.springserver.domain.payment.dto.DailyStatsDto;
 import com.bsight.springserver.domain.payment.dto.HourlyHeatmapDto;
 import com.bsight.springserver.domain.payment.dto.UploadResult;
@@ -57,5 +58,18 @@ public class PaymentController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         return ApiResponse.success(paymentService.getHourlyHeatmap(from, to));
+    }
+
+    @Operation(summary = "채널별 매출 비중 (도넛)",
+            description = "기간 내 매장(OFFLINE) / 배달(DELIVERY) 매출 합계·건수·비율. " +
+                          "from/to 미입력 시 최근 30일. ratio는 전체 매출 대비 비율(0.0~1.0).")
+    @GetMapping("/stats/channel-breakdown")
+    public ApiResponse<List<ChannelBreakdownDto>> channelBreakdown(
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        return ApiResponse.success(paymentService.getChannelBreakdown(from, to));
     }
 }
