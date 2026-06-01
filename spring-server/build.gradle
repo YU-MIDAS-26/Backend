@@ -66,6 +66,9 @@ dependencies {
 
     // Security
     implementation 'org.springframework.boot:spring-boot-starter-security'
+
+    // CSV 파싱
+    implementation 'com.opencsv:opencsv:5.9'
 }
 
 tasks.named('test') {
