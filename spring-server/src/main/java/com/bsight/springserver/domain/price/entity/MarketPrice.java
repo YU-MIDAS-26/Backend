@@ -42,7 +42,7 @@ public class MarketPrice extends BaseEntity {
     @Column(length = 10)
     private String kindCode;        // 품종코드 ("01")
 
-    @Column(length = 20)
+    @Column(name = "rank_name", length = 20)
     private String rank;            // 등급 ("상품"/"중품")
 
     @Column(length = 10)
