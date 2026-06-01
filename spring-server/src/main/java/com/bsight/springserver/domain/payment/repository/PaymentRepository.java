@@ -25,4 +25,21 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             "ORDER BY DATE(paid_at)", nativeQuery = true)
     List<Object[]> findDailyStatsRaw(@Param("from") LocalDateTime from,
                                      @Param("to") LocalDateTime to);
+
+    /**
+     * 요일 x 시간대 매출 집계 (히트맵용)
+     * - DAYOFWEEK: MySQL 기본 (1=일, 2=월, ..., 7=토) — 서비스에서 한국 관습으로 변환
+     * - HOUR: 0~23
+     * 반환: Object[] = [Integer dow, Integer hour, BigDecimal/Long, Long]
+     */
+    @Query(value = "SELECT DAYOFWEEK(paid_at) AS dow, " +
+            "       HOUR(paid_at)      AS hr, " +
+            "       SUM(amount)        AS total, " +
+            "       COUNT(*)           AS cnt " +
+            "FROM payments " +
+            "WHERE paid_at BETWEEN :from AND :to " +
+            "GROUP BY DAYOFWEEK(paid_at), HOUR(paid_at) " +
+            "ORDER BY dow, hr", nativeQuery = true)
+    List<Object[]> findHeatmapStatsRaw(@Param("from") LocalDateTime from,
+                                       @Param("to") LocalDateTime to);
 }
