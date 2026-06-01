@@ -1,6 +1,7 @@
 package com.bsight.springserver.domain.cost.entity;
 
 import com.bsight.springserver.common.enums.CycleType;
+import com.bsight.springserver.domain.user.entity.User;
 import com.bsight.springserver.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -23,6 +24,10 @@ public class VariableCost extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
     @Column(nullable = false)
     private LocalDate costDate;
 
@@ -40,7 +45,8 @@ public class VariableCost extends BaseTimeEntity {
     private Long totalCost; // 변동비 합계
 
     @Builder
-    public VariableCost(LocalDate costDate, CycleType cycleType, Long ingredientCost, Long salaryCost) {
+    public VariableCost(User user, LocalDate costDate, CycleType cycleType, Long ingredientCost, Long salaryCost) {
+        this.user = user;
         this.costDate = costDate;
         this.cycleType = cycleType;
         this.ingredientCost = ingredientCost;

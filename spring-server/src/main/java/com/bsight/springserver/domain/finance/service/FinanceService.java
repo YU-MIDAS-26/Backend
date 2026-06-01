@@ -10,9 +10,17 @@ import com.bsight.springserver.domain.finance.dto.response.CalendarDailyResponse
 import com.bsight.springserver.domain.finance.dto.response.DailyDetailResponse;
 import com.bsight.springserver.domain.sales.entity.Sales;
 import com.bsight.springserver.domain.sales.repository.SalesRepository;
+import com.bsight.springserver.domain.user.entity.User;
+import com.bsight.springserver.domain.user.entity.UserStatus;
+import com.bsight.springserver.domain.user.repository.UserRepository;
 import com.bsight.springserver.global.ai.OpenAiClient;
+import com.bsight.springserver.global.exception.CustomException;
+import com.bsight.springserver.global.exception.ErrorCode;
+import com.bsight.springserver.global.security.auth.CustomUserDetails;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,7 +34,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Service that aggregates sales/cost data for finance dashboard and AI insights.
+ * 매출/비용 데이터를 바탕으로 재무 지표를 조회하는 서비스
  */
 @Service
 @Transactional(readOnly = true)
@@ -36,30 +44,31 @@ public class FinanceService {
     private final SalesRepository salesRepository;
     private final FixedCostRepository fixedCostRepository;
     private final VariableCostRepository variableCostRepository;
+    private final UserRepository userRepository;
     private final OpenAiClient openAiClient;
     private final ObjectMapper objectMapper;
 
     /**
-     * Builds day-by-day calendar data for a given month.
-     * - Sales: latest DAILY/HOURLY record per day
-     * - Variable cost: latest DAILY record per day
+     * 월간 캘린더 데이터를 조회합니다.
+     * - 매출: DAILY/HOURLY 중 날짜별 최신 1건 반영
+     * - 변동비: DAILY 중 날짜별 최신 1건 반영
      */
     public List<CalendarDailyResponse> getCalendarData(String yearMonthStr) {
+        User user = getCurrentUser();
         YearMonth yearMonth = YearMonth.parse(yearMonthStr);
         LocalDate start = yearMonth.atDay(1);
         LocalDate end = yearMonth.atEndOfMonth();
         int daysInMonth = yearMonth.lengthOfMonth();
 
-        List<Sales> salesList = salesRepository.findAll().stream()
-                .filter(s -> !s.getSaleDate().isBefore(start) && !s.getSaleDate().isAfter(end))
+        List<Sales> salesList = salesRepository.findByUserAndSaleDateBetween(user, start, end).stream()
                 .filter(s -> isFinanceSalesCycle(s.getCycleType()))
                 .toList();
 
-        List<VariableCost> variableCosts = variableCostRepository.findByCostDateBetween(start, end).stream()
+        List<VariableCost> variableCosts = variableCostRepository.findByUserAndCostDateBetween(user, start, end).stream()
                 .filter(variableCost -> variableCost.getCycleType() == CycleType.DAILY)
                 .toList();
 
-        FixedCost fixedCostEntity = fixedCostRepository.findByTargetYearMonth(yearMonthStr).orElse(null);
+        FixedCost fixedCostEntity = fixedCostRepository.findByUserAndTargetYearMonth(user, yearMonthStr).orElse(null);
         long dailyFixedCost = (fixedCostEntity != null) ? (fixedCostEntity.getTotalCost() / daysInMonth) : 0L;
 
         Map<LocalDate, Sales> latestSalesByDate = salesList.stream()
@@ -94,23 +103,24 @@ public class FinanceService {
     }
 
     /**
-     * Returns detailed finance values for a single day.
+     * 특정 날짜 상세 지표를 조회합니다.
      */
     public DailyDetailResponse getDailyDetail(LocalDate date) {
+        User user = getCurrentUser();
         YearMonth yearMonth = YearMonth.from(date);
         String yearMonthStr = yearMonth.toString();
 
-        Sales sales = salesRepository.findAllBySaleDate(date).stream()
+        Sales sales = salesRepository.findAllByUserAndSaleDate(user, date).stream()
                 .filter(s -> isFinanceSalesCycle(s.getCycleType()))
                 .max(latestUpdatedSalesComparator())
                 .orElse(null);
 
-        VariableCost variableCostEntity = variableCostRepository.findByCostDateBetween(date, date).stream()
+        VariableCost variableCostEntity = variableCostRepository.findByUserAndCostDateBetween(user, date, date).stream()
                 .filter(variableCost -> variableCost.getCycleType() == CycleType.DAILY)
                 .max(latestUpdatedVariableCostComparator())
                 .orElse(null);
 
-        FixedCost fixedCostEntity = fixedCostRepository.findByTargetYearMonth(yearMonthStr).orElse(null);
+        FixedCost fixedCostEntity = fixedCostRepository.findByUserAndTargetYearMonth(user, yearMonthStr).orElse(null);
 
         long totalSales = (sales != null) ? sales.getTotalAmount() : 0L;
         long variableCost = (variableCostEntity != null) ? variableCostEntity.getTotalCost() : 0L;
@@ -136,23 +146,23 @@ public class FinanceService {
     }
 
     /**
-     * Builds monthly AI insight payload using latest record per day.
+     * 월간 AI 인사이트를 생성합니다.
      */
     public AiInsightResponse getAiInsight(String yearMonthStr) {
+        User user = getCurrentUser();
         YearMonth yearMonth = YearMonth.parse(yearMonthStr);
         LocalDate start = yearMonth.atDay(1);
         LocalDate end = yearMonth.atEndOfMonth();
 
-        List<Sales> salesList = salesRepository.findAll().stream()
-                .filter(s -> !s.getSaleDate().isBefore(start) && !s.getSaleDate().isAfter(end))
+        List<Sales> salesList = salesRepository.findByUserAndSaleDateBetween(user, start, end).stream()
                 .filter(s -> isFinanceSalesCycle(s.getCycleType()))
                 .toList();
 
-        List<VariableCost> variableCosts = variableCostRepository.findByCostDateBetween(start, end).stream()
+        List<VariableCost> variableCosts = variableCostRepository.findByUserAndCostDateBetween(user, start, end).stream()
                 .filter(variableCost -> variableCost.getCycleType() == CycleType.DAILY)
                 .toList();
 
-        FixedCost fixedCost = fixedCostRepository.findByTargetYearMonth(yearMonthStr).orElse(null);
+        FixedCost fixedCost = fixedCostRepository.findByUserAndTargetYearMonth(user, yearMonthStr).orElse(null);
 
         Map<LocalDate, Sales> latestSalesByDate = salesList.stream()
                 .collect(Collectors.toMap(
@@ -220,6 +230,23 @@ public class FinanceService {
     private Comparator<VariableCost> latestUpdatedVariableCostComparator() {
         return Comparator.comparing(VariableCost::getUpdatedAt, Comparator.nullsLast(Comparator.naturalOrder()))
                 .thenComparing(VariableCost::getId, Comparator.nullsLast(Comparator.naturalOrder()));
+    }
+
+    private User getCurrentUser() {
+        Long userId = getCurrentUserId();
+
+        return userRepository.findByIdAndStatusNot(userId, UserStatus.DELETED)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    private Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+        if (authentication == null || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
+            throw new CustomException(ErrorCode.UNAUTHORIZED);
+        }
+
+        return userDetails.getUserId();
     }
 
     private AiInsightResponse getMockInsight() {

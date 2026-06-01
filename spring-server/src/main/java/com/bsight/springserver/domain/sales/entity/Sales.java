@@ -1,6 +1,7 @@
 package com.bsight.springserver.domain.sales.entity;
 
 import com.bsight.springserver.common.enums.CycleType;
+import com.bsight.springserver.domain.user.entity.User;
 import com.bsight.springserver.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -25,6 +26,10 @@ public class Sales extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id")
+    private User user;
+
     @Column(nullable = false)
     private LocalDate saleDate;
 
@@ -39,7 +44,8 @@ public class Sales extends BaseTimeEntity {
     private List<SalesHourly> hourlySales = new ArrayList<>();
 
     @Builder
-    public Sales(LocalDate saleDate, CycleType cycleType, Long totalAmount) {
+    public Sales(User user, LocalDate saleDate, CycleType cycleType, Long totalAmount) {
+        this.user = user;
         this.saleDate = saleDate;
         this.cycleType = cycleType;
         this.totalAmount = totalAmount;
