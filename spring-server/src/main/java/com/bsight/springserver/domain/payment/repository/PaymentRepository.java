@@ -42,4 +42,16 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             "ORDER BY dow, hr", nativeQuery = true)
     List<Object[]> findHeatmapStatsRaw(@Param("from") LocalDateTime from,
                                        @Param("to") LocalDateTime to);
+
+    /**
+     * 채널별 매출 집계 (도넛 차트용)
+     * 반환: Object[] = [String channel, BigDecimal/Long total, Long cnt]
+     */
+    @Query(value = "SELECT channel, SUM(amount) AS total, COUNT(*) AS cnt " +
+            "FROM payments " +
+            "WHERE paid_at BETWEEN :from AND :to " +
+            "GROUP BY channel " +
+            "ORDER BY channel", nativeQuery = true)
+    List<Object[]> findChannelBreakdownRaw(@Param("from") LocalDateTime from,
+                                           @Param("to") LocalDateTime to);
 }

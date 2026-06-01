@@ -1,5 +1,6 @@
 package com.bsight.springserver.domain.payment.service;
 
+import com.bsight.springserver.domain.payment.dto.ChannelBreakdownDto;
 import com.bsight.springserver.domain.payment.dto.DailyStatsDto;
 import com.bsight.springserver.domain.payment.dto.HourlyHeatmapDto;
 import com.bsight.springserver.domain.payment.dto.PaymentRowDto;
@@ -201,5 +202,50 @@ public class PaymentService {
      */
     private int toKoreanDayOfWeek(int mysqlDow) {
         return mysqlDow == 1 ? 7 : mysqlDow - 1;
+    }
+
+    /**
+     * 채널별(매장/배달) 매출 비중 조회
+     * - from/to 미입력 시 최근 30일
+     * - ratio는 백엔드에서 계산 (전체 매출 대비 비율, 0.0 ~ 1.0)
+     */
+    @Transactional(readOnly = true)
+    public List<ChannelBreakdownDto> getChannelBreakdown(LocalDate from, LocalDate to) {
+        LocalDate effectiveTo = (to != null) ? to : LocalDate.now();
+        LocalDate effectiveFrom = (from != null) ? from : effectiveTo.minusDays(30);
+
+        LocalDateTime fromDt = effectiveFrom.atStartOfDay();
+        LocalDateTime toDt = effectiveTo.atTime(LocalTime.MAX);
+
+        List<Object[]> raw = paymentRepository.findChannelBreakdownRaw(fromDt, toDt);
+
+        long totalAmount = raw.stream()
+                .mapToLong(row -> ((Number) row[1]).longValue())
+                .sum();
+
+        return raw.stream()
+                .map(row -> {
+                    Channel channel = Channel.valueOf((String) row[0]);
+                    long amount = ((Number) row[1]).longValue();
+                    long count = ((Number) row[2]).longValue();
+                    double ratio = totalAmount > 0
+                            ? (double) amount / totalAmount
+                            : 0.0;
+                    return ChannelBreakdownDto.builder()
+                            .channel(channel)
+                            .label(channelLabel(channel))
+                            .amount(amount)
+                            .count(count)
+                            .ratio(Math.round(ratio * 10000.0) / 10000.0)  // 소수점 4자리
+                            .build();
+                })
+                .toList();
+    }
+
+    private String channelLabel(Channel channel) {
+        return switch (channel) {
+            case OFFLINE -> "매장";
+            case DELIVERY -> "배달";
+        };
     }
 }
