@@ -48,6 +48,7 @@ public class SecurityConfig {
                                 "/api/auth/password-reset/confirm"
                         ).permitAll()
                         .requestMatchers("/api/payments/**").permitAll()  // TODO: 인증 적용 (임시 permit)
+                        .requestMatchers("/api/chat/**").permitAll()      // TODO: 인증 적용 (임시 permit)
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
