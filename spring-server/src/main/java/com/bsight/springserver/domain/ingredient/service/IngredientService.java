@@ -2,6 +2,7 @@ package com.bsight.springserver.domain.ingredient.service;
 
 import com.bsight.springserver.domain.ingredient.dto.CreateIngredientRequest;
 import com.bsight.springserver.domain.ingredient.dto.IngredientResponse;
+import com.bsight.springserver.domain.ingredient.dto.UpdateIngredientRequest;
 import com.bsight.springserver.domain.ingredient.entity.Ingredient;
 import com.bsight.springserver.domain.ingredient.repository.IngredientRepository;
 import com.bsight.springserver.domain.user.entity.User;
@@ -57,6 +58,30 @@ public class IngredientService {
         return ingredientRepository.findAllByUserOrderByCreatedAtDesc(user).stream()
                 .map(IngredientResponse::from)
                 .toList();
+    }
+
+    /**
+     * 현재 로그인 사장님의 재료 수정 (본인 재료만 수정 가능)
+     * - 다른 재료와 이름 충돌 시 INGREDIENT_ALREADY_EXISTS 에러
+     */
+    @Transactional
+    public IngredientResponse update(Long ingredientId, UpdateIngredientRequest request) {
+        User user = getCurrentUser();
+        Ingredient ingredient = ingredientRepository.findByIdAndUser(ingredientId, user)
+                .orElseThrow(() -> new CustomException(ErrorCode.INGREDIENT_NOT_FOUND));
+
+        String newName = request.getName().trim();
+        String newUnit = request.getUnit().trim();
+
+        if (!ingredient.getName().equals(newName)) {
+            ingredientRepository.findByUserAndName(user, newName)
+                    .ifPresent(existing -> {
+                        throw new CustomException(ErrorCode.INGREDIENT_ALREADY_EXISTS);
+                    });
+        }
+
+        ingredient.update(newName, newUnit);
+        return IngredientResponse.from(ingredient);
     }
 
     /**

@@ -40,4 +40,12 @@ public class Ingredient extends BaseEntity {
         this.name = name;
         this.unit = unit;
     }
+
+    /**
+     * 재료 정보 수정 (name + unit)
+     */
+    public void update(String name, String unit) {
+        this.name = name;
+        this.unit = unit;
+    }
 }
