@@ -2,6 +2,7 @@ package com.bsight.springserver.domain.ingredient.controller;
 
 import com.bsight.springserver.domain.ingredient.dto.CreateIngredientRequest;
 import com.bsight.springserver.domain.ingredient.dto.IngredientResponse;
+import com.bsight.springserver.domain.ingredient.dto.UpdateIngredientRequest;
 import com.bsight.springserver.domain.ingredient.service.IngredientService;
 import com.bsight.springserver.global.response.ApiResponse;
 import io.swagger.v3.oas.annotations.Operation;
@@ -30,6 +31,15 @@ public class IngredientController {
     @GetMapping
     public ApiResponse<List<IngredientResponse>> getAll() {
         return ApiResponse.success(ingredientService.getAll());
+    }
+
+    @Operation(summary = "재료 수정", description = "본인이 등록한 재료의 이름·단위를 수정합니다.")
+    @PutMapping("/{ingredientId}")
+    public ApiResponse<IngredientResponse> update(
+            @PathVariable Long ingredientId,
+            @Valid @RequestBody UpdateIngredientRequest request
+    ) {
+        return ApiResponse.success("재료가 수정되었습니다.", ingredientService.update(ingredientId, request));
     }
 
     @Operation(summary = "재료 삭제", description = "본인이 등록한 재료만 삭제 가능합니다.")
