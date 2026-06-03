@@ -8,12 +8,19 @@ import com.bsight.springserver.domain.payment.dto.UploadResult;
 import com.bsight.springserver.domain.payment.entity.Channel;
 import com.bsight.springserver.domain.payment.entity.Payment;
 import com.bsight.springserver.domain.payment.repository.PaymentRepository;
+import com.bsight.springserver.domain.sales.service.SalesService;
+import com.bsight.springserver.domain.user.entity.User;
+import com.bsight.springserver.domain.user.entity.UserStatus;
+import com.bsight.springserver.domain.user.repository.UserRepository;
 import com.bsight.springserver.global.exception.CustomException;
 import com.bsight.springserver.global.exception.ErrorCode;
+import com.bsight.springserver.global.security.auth.CustomUserDetails;
 import com.opencsv.bean.CsvToBean;
 import com.opencsv.bean.CsvToBeanBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -27,7 +34,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -35,12 +44,11 @@ import java.util.List;
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final SalesService salesService;
+    private final UserRepository userRepository;
 
     /**
-     * 판매전표 CSV 업로드 → 검증 → DB 저장
-     * - 취소 거래(결제상태=취소) skip
-     * - 중복 거래(paid_at + order_number + channel) skip
-     * - 알 수 없는 채널 skip + 에러 리포트
+     * 판매전표 CSV 업로드 → 검증 → DB 저장 (현재 로그인 사장님 기준)
      */
     @Transactional
     public UploadResult upload(MultipartFile file) {
@@ -48,22 +56,22 @@ public class PaymentService {
             throw new CustomException(ErrorCode.CSV_FILE_REQUIRED);
         }
 
+        User user = getCurrentUser();
         List<PaymentRowDto> rows = parseCsv(file);
         List<UploadResult.RowError> errors = new ArrayList<>();
         List<Payment> toSave = new ArrayList<>();
+        Set<LocalDate> datesToSync = new HashSet<>();
 
         int totalRows = rows.size();
         for (int i = 0; i < rows.size(); i++) {
-            int rowNumber = i + 1;     // CSV 헤더 제외, 1부터
+            int rowNumber = i + 1;
             PaymentRowDto row = rows.get(i);
 
-            // 1) 취소 거래 skip
             if ("취소".equals(row.getStatusRaw())) {
                 errors.add(rowError(rowNumber, "취소 거래는 저장하지 않음"));
                 continue;
             }
 
-            // 2) 필수값 검증
             if (row.getPaidAt() == null) {
                 errors.add(rowError(rowNumber, "결제시각이 비어있음"));
                 continue;
@@ -77,22 +85,23 @@ public class PaymentService {
                 continue;
             }
 
-            // 3) 채널 매핑
             Channel channel = Channel.from(row.getChannelRaw());
             if (channel == null) {
                 errors.add(rowError(rowNumber, "알 수 없는 주문채널: " + row.getChannelRaw()));
                 continue;
             }
 
-            // 4) 중복 체크
-            if (paymentRepository.existsByPaidAtAndOrderNumberAndChannel(
-                    row.getPaidAt(), row.getOrderNumber(), channel)) {
+            // 중복 체크 (사장님 기준)
+            if (paymentRepository.existsByUserAndPaidAtAndOrderNumberAndChannel(
+                    user, row.getPaidAt(), row.getOrderNumber(), channel)) {
                 errors.add(rowError(rowNumber, "중복 거래(이미 저장됨)"));
+                datesToSync.add(row.getPaidAt().toLocalDate());
                 continue;
             }
 
-            // 5) 통과 → 엔티티 생성
+            datesToSync.add(row.getPaidAt().toLocalDate());
             toSave.add(Payment.builder()
+                    .user(user)
                     .paidAt(row.getPaidAt())
                     .channel(channel)
                     .amount(row.getAmount())
@@ -101,11 +110,12 @@ public class PaymentService {
         }
 
         paymentRepository.saveAll(toSave);
+        syncDailySales(user, datesToSync);
         int savedCount = toSave.size();
         int skippedCount = totalRows - savedCount;
 
-        log.info("판매전표 CSV 업로드 - 총 {}건, 저장 {}건, 스킵 {}건",
-                totalRows, savedCount, skippedCount);
+        log.info("판매전표 CSV 업로드 (user={}) - 총 {}건, 저장 {}건, 스킵 {}건",
+                user.getId(), totalRows, savedCount, skippedCount);
 
         return UploadResult.builder()
                 .totalRows(totalRows)
@@ -115,6 +125,15 @@ public class PaymentService {
                 .build();
     }
 
+    private void syncDailySales(User user, Set<LocalDate> datesToSync) {
+        for (LocalDate date : datesToSync) {
+            LocalDateTime fromDt = date.atStartOfDay();
+            LocalDateTime toDt = date.atTime(LocalTime.MAX);
+            Long totalAmount = paymentRepository.sumAmountByUserAndPaidAtBetween(user.getId(), fromDt, toDt);
+            salesService.saveDailySalesFromCsv(user, date, totalAmount != null ? totalAmount : 0L);
+        }
+    }
+
     private List<PaymentRowDto> parseCsv(MultipartFile file) {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
@@ -122,7 +141,7 @@ public class PaymentService {
             CsvToBean<PaymentRowDto> beans = new CsvToBeanBuilder<PaymentRowDto>(reader)
                     .withType(PaymentRowDto.class)
                     .withIgnoreLeadingWhiteSpace(true)
-                    .withThrowExceptions(false)   // 잘못된 행이 있어도 전체 중단 없이 진행
+                    .withThrowExceptions(false)
                     .build();
             return beans.parse();
         } catch (IOException e) {
@@ -142,19 +161,18 @@ public class PaymentService {
     }
 
     /**
-     * 일별 매출 추이 조회
-     * - from/to 미입력 시 최근 30일 기본값
-     * - from은 00:00:00, to는 23:59:59까지 포함
+     * 일별 매출 추이 조회 (현재 로그인 사장님)
      */
     @Transactional(readOnly = true)
     public List<DailyStatsDto> getDailyStats(LocalDate from, LocalDate to) {
+        User user = getCurrentUser();
         LocalDate effectiveTo = (to != null) ? to : LocalDate.now();
         LocalDate effectiveFrom = (from != null) ? from : effectiveTo.minusDays(30);
 
         LocalDateTime fromDt = effectiveFrom.atStartOfDay();
         LocalDateTime toDt = effectiveTo.atTime(LocalTime.MAX);
 
-        return paymentRepository.findDailyStatsRaw(fromDt, toDt).stream()
+        return paymentRepository.findDailyStatsRaw(user.getId(), fromDt, toDt).stream()
                 .map(row -> DailyStatsDto.builder()
                         .date(toLocalDate(row[0]))
                         .amount(((Number) row[1]).longValue())
@@ -163,10 +181,6 @@ public class PaymentService {
                 .toList();
     }
 
-    /**
-     * Native query DATE() 결과를 LocalDate로 안전하게 변환
-     * (드라이버/Hibernate 버전에 따라 java.sql.Date, LocalDate, String 중 하나로 반환됨)
-     */
     private LocalDate toLocalDate(Object value) {
         if (value instanceof LocalDate ld) return ld;
         if (value instanceof Date d) return d.toLocalDate();
@@ -174,20 +188,18 @@ public class PaymentService {
     }
 
     /**
-     * 요일 x 시간대 매출 히트맵 조회
-     * - from/to 미입력 시 최근 30일
-     * - 응답의 dayOfWeek: 1=월, 2=화, ..., 7=일 (한국 관습)
-     * - 빈 셀(거래 없는 요일x시간)은 응답에 포함되지 않음 — 프론트가 7x24 격자로 padding
+     * 요일 x 시간대 매출 히트맵 조회 (현재 로그인 사장님)
      */
     @Transactional(readOnly = true)
     public List<HourlyHeatmapDto> getHourlyHeatmap(LocalDate from, LocalDate to) {
+        User user = getCurrentUser();
         LocalDate effectiveTo = (to != null) ? to : LocalDate.now();
         LocalDate effectiveFrom = (from != null) ? from : effectiveTo.minusDays(30);
 
         LocalDateTime fromDt = effectiveFrom.atStartOfDay();
         LocalDateTime toDt = effectiveTo.atTime(LocalTime.MAX);
 
-        return paymentRepository.findHeatmapStatsRaw(fromDt, toDt).stream()
+        return paymentRepository.findHeatmapStatsRaw(user.getId(), fromDt, toDt).stream()
                 .map(row -> HourlyHeatmapDto.builder()
                         .dayOfWeek(toKoreanDayOfWeek(((Number) row[0]).intValue()))
                         .hour(((Number) row[1]).intValue())
@@ -197,27 +209,23 @@ public class PaymentService {
                 .toList();
     }
 
-    /**
-     * MySQL DAYOFWEEK(1=일, 2=월, ..., 7=토) → 한국 관습(1=월, ..., 7=일) 변환
-     */
     private int toKoreanDayOfWeek(int mysqlDow) {
         return mysqlDow == 1 ? 7 : mysqlDow - 1;
     }
 
     /**
-     * 채널별(매장/배달) 매출 비중 조회
-     * - from/to 미입력 시 최근 30일
-     * - ratio는 백엔드에서 계산 (전체 매출 대비 비율, 0.0 ~ 1.0)
+     * 채널별(매장/배달) 매출 비중 조회 (현재 로그인 사장님)
      */
     @Transactional(readOnly = true)
     public List<ChannelBreakdownDto> getChannelBreakdown(LocalDate from, LocalDate to) {
+        User user = getCurrentUser();
         LocalDate effectiveTo = (to != null) ? to : LocalDate.now();
         LocalDate effectiveFrom = (from != null) ? from : effectiveTo.minusDays(30);
 
         LocalDateTime fromDt = effectiveFrom.atStartOfDay();
         LocalDateTime toDt = effectiveTo.atTime(LocalTime.MAX);
 
-        List<Object[]> raw = paymentRepository.findChannelBreakdownRaw(fromDt, toDt);
+        List<Object[]> raw = paymentRepository.findChannelBreakdownRaw(user.getId(), fromDt, toDt);
 
         long totalAmount = raw.stream()
                 .mapToLong(row -> ((Number) row[1]).longValue())
@@ -236,7 +244,7 @@ public class PaymentService {
                             .label(channelLabel(channel))
                             .amount(amount)
                             .count(count)
-                            .ratio(Math.round(ratio * 10000.0) / 10000.0)  // 소수점 4자리
+                            .ratio(Math.round(ratio * 10000.0) / 10000.0)
                             .build();
                 })
                 .toList();
@@ -247,5 +255,22 @@ public class PaymentService {
             case OFFLINE -> "매장";
             case DELIVERY -> "배달";
         };
+    }
+
+    // ── 내부 헬퍼 (현재 로그인 사장님) ────────────────────────────────────
+
+    private User getCurrentUser() {
+        Long userId = getCurrentUserId();
+        return userRepository.findByIdAndStatusNot(userId, UserStatus.DELETED)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    private Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null
+                || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
+            throw new CustomException(ErrorCode.UNAUTHORIZED);
+        }
+        return userDetails.getUserId();
     }
 }
