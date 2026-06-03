@@ -109,13 +109,9 @@ public class MailService {
                             링크는 10분 동안만 유효합니다.<br>
                             본인이 요청하지 않았다면 이 메일은 무시하셔도 됩니다.
                         </p>
-                        <p style="font-size:12px; line-height:1.6; color:#8a9aa4; word-break:break-all;">
-                            버튼이 동작하지 않으면 아래 링크를 복사해 브라우저에 붙여넣어 주세요.<br>
-                            %s
-                        </p>
                     </div>
                 </body>
                 </html>
-                """.formatted(resetLink, resetLink);
+                """.formatted(resetLink);
     }
 }
