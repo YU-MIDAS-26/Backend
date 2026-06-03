@@ -2,18 +2,17 @@ package com.bsight.springserver.domain.sales.repository;
 
 import com.bsight.springserver.common.enums.CycleType;
 import com.bsight.springserver.domain.sales.entity.Sales;
+import com.bsight.springserver.domain.user.entity.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.Optional;
 
 public interface SalesRepository extends JpaRepository<Sales, Long> {
-    Optional<Sales> findBySaleDate(LocalDate saleDate);
 
-    List<Sales> findBySaleDateAndCycleType(LocalDate saleDate, CycleType cycleType);
+    List<Sales> findByUserAndSaleDateAndCycleType(User user, LocalDate saleDate, CycleType cycleType);
 
-    List<Sales> findBySaleDateBetweenAndCycleType(LocalDate startDate, LocalDate endDate, CycleType cycleType);
+    List<Sales> findByUserAndSaleDateBetweenAndCycleType(User user, LocalDate startDate, LocalDate endDate, CycleType cycleType);
 
-    void deleteBySaleDateAndCycleType(LocalDate saleDate, CycleType cycleType);
+    void deleteByUserAndSaleDateAndCycleType(User user, LocalDate saleDate, CycleType cycleType);
 }
