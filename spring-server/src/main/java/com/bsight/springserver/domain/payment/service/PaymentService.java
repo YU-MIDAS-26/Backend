@@ -8,6 +8,7 @@ import com.bsight.springserver.domain.payment.dto.UploadResult;
 import com.bsight.springserver.domain.payment.entity.Channel;
 import com.bsight.springserver.domain.payment.entity.Payment;
 import com.bsight.springserver.domain.payment.repository.PaymentRepository;
+import com.bsight.springserver.domain.sales.service.SalesService;
 import com.bsight.springserver.global.exception.CustomException;
 import com.bsight.springserver.global.exception.ErrorCode;
 import com.opencsv.bean.CsvToBean;
@@ -27,7 +28,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
@@ -35,6 +38,7 @@ import java.util.List;
 public class PaymentService {
 
     private final PaymentRepository paymentRepository;
+    private final SalesService salesService;
 
     /**
      * 판매전표 CSV 업로드 → 검증 → DB 저장
@@ -51,6 +55,7 @@ public class PaymentService {
         List<PaymentRowDto> rows = parseCsv(file);
         List<UploadResult.RowError> errors = new ArrayList<>();
         List<Payment> toSave = new ArrayList<>();
+        Set<LocalDate> datesToSync = new HashSet<>();
 
         int totalRows = rows.size();
         for (int i = 0; i < rows.size(); i++) {
@@ -88,10 +93,12 @@ public class PaymentService {
             if (paymentRepository.existsByPaidAtAndOrderNumberAndChannel(
                     row.getPaidAt(), row.getOrderNumber(), channel)) {
                 errors.add(rowError(rowNumber, "중복 거래(이미 저장됨)"));
+                datesToSync.add(row.getPaidAt().toLocalDate());
                 continue;
             }
 
             // 5) 통과 → 엔티티 생성
+            datesToSync.add(row.getPaidAt().toLocalDate());
             toSave.add(Payment.builder()
                     .paidAt(row.getPaidAt())
                     .channel(channel)
@@ -101,6 +108,7 @@ public class PaymentService {
         }
 
         paymentRepository.saveAll(toSave);
+        syncDailySales(datesToSync);
         int savedCount = toSave.size();
         int skippedCount = totalRows - savedCount;
 
@@ -113,6 +121,15 @@ public class PaymentService {
                 .skippedCount(skippedCount)
                 .errors(errors)
                 .build();
+    }
+
+    private void syncDailySales(Set<LocalDate> datesToSync) {
+        for (LocalDate date : datesToSync) {
+            LocalDateTime fromDt = date.atStartOfDay();
+            LocalDateTime toDt = date.atTime(LocalTime.MAX);
+            Long totalAmount = paymentRepository.sumAmountByPaidAtBetween(fromDt, toDt);
+            salesService.saveDailySalesFromCsv(date, totalAmount != null ? totalAmount : 0L);
+        }
     }
 
     private List<PaymentRowDto> parseCsv(MultipartFile file) {

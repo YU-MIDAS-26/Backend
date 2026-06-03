@@ -14,6 +14,12 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     boolean existsByPaidAtAndOrderNumberAndChannel(
             LocalDateTime paidAt, String orderNumber, Channel channel);
 
+    @Query(value = "SELECT COALESCE(SUM(amount), 0) " +
+            "FROM payments " +
+            "WHERE paid_at BETWEEN :from AND :to", nativeQuery = true)
+    Long sumAmountByPaidAtBetween(@Param("from") LocalDateTime from,
+                                  @Param("to") LocalDateTime to);
+
     /**
      * 일별 매출 집계 (날짜, 금액합계, 건수)
      * 반환: Object[] = [java.sql.Date, BigDecimal/Long, Long]
