@@ -6,7 +6,15 @@ import com.bsight.springserver.domain.sales.dto.response.SalesPeriodResponse;
 import com.bsight.springserver.domain.sales.entity.Sales;
 import com.bsight.springserver.domain.sales.entity.SalesHourly;
 import com.bsight.springserver.domain.sales.repository.SalesRepository;
+import com.bsight.springserver.domain.user.entity.User;
+import com.bsight.springserver.domain.user.entity.UserStatus;
+import com.bsight.springserver.domain.user.repository.UserRepository;
+import com.bsight.springserver.global.exception.CustomException;
+import com.bsight.springserver.global.exception.ErrorCode;
+import com.bsight.springserver.global.security.auth.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,25 +27,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-/**
- * 매출 관련 비즈니스 로직을 처리하는 서비스
- */
 @Service
 @Transactional
 @RequiredArgsConstructor
 public class SalesService {
 
     private final SalesRepository salesRepository;
+    private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
     public SalesPeriodResponse getSalesPeriod(CycleType cycleType, LocalDate baseDate) {
+        User user = getCurrentUser();
         LocalDate normalizedBaseDate = normalizeBaseDate(cycleType, baseDate);
         PeriodRange periodRange = resolvePeriodRange(cycleType, normalizedBaseDate);
 
-        List<Sales> salesList = salesRepository.findBySaleDateAndCycleType(normalizedBaseDate, cycleType);
-        Sales latestSales = salesList.stream()
-                .max(Comparator.comparing(Sales::getUpdatedAt))
-                .orElse(null);
+        List<Sales> salesList = salesRepository.findByUserAndSaleDateAndCycleType(user, normalizedBaseDate, cycleType);
+        Sales latestSales = salesList.stream().max(Comparator.comparing(Sales::getUpdatedAt)).orElse(null);
 
         return SalesPeriodResponse.builder()
                 .cycleType(cycleType)
@@ -51,112 +56,86 @@ public class SalesService {
 
     @Transactional(readOnly = true)
     public Sales getLatestDailySales(LocalDate saleDate) {
-        return findLatestSales(saleDate, CycleType.DAILY);
+        return findLatestSales(getCurrentUser(), saleDate, CycleType.DAILY);
     }
 
     @Transactional(readOnly = true)
     public List<Sales> getDailySalesBetween(LocalDate startDate, LocalDate endDate) {
-        return salesRepository.findBySaleDateBetweenAndCycleType(startDate, endDate, CycleType.DAILY).stream()
+        User user = getCurrentUser();
+        return salesRepository.findByUserAndSaleDateBetweenAndCycleType(user, startDate, endDate, CycleType.DAILY).stream()
                 .collect(Collectors.groupingBy(Sales::getSaleDate))
-                .entrySet()
-                .stream()
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        entry -> entry.getValue().stream()
-                                .max(Comparator.comparing(Sales::getUpdatedAt))
-                                .orElseThrow()
-                ))
-                .values()
-                .stream()
-                .toList();
+                .entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey,
+                        entry -> entry.getValue().stream().max(Comparator.comparing(Sales::getUpdatedAt)).orElseThrow()))
+                .values().stream().toList();
     }
 
     public void deleteSalesPeriod(CycleType cycleType, LocalDate baseDate) {
+        User user = getCurrentUser();
         LocalDate normalizedBaseDate = normalizeBaseDate(cycleType, baseDate);
-        salesRepository.deleteBySaleDateAndCycleType(normalizedBaseDate, cycleType);
+        salesRepository.deleteByUserAndSaleDateAndCycleType(user, normalizedBaseDate, cycleType);
     }
 
-    public Long saveDailySalesFromCsv(LocalDate saleDate, Long totalAmount) {
-        return saveOrUpdateSales(saleDate, CycleType.DAILY, totalAmount, List.of());
+    public Long saveDailySalesFromCsv(User user, LocalDate saleDate, Long totalAmount) {
+        return saveOrUpdateSales(user, saleDate, CycleType.DAILY, totalAmount, List.of());
     }
 
-    /**
-     * 매출 데이터를 저장하거나, 같은 기준일/주기의 데이터가 있으면 수정합니다.
-     * 주기가 HOURLY인 경우 하위 시간대별 매출도 함께 저장합니다.
-     */
     public Long createSales(SalesCreateRequest request) {
+        User user = getCurrentUser();
         LocalDate normalizedBaseDate = normalizeBaseDate(request.getCycleType(), request.getSaleDate());
         List<SalesHourly> hourlySales = buildHourlySales(request);
-        return saveOrUpdateSales(normalizedBaseDate, request.getCycleType(), request.getTotalAmount(), hourlySales);
+        return saveOrUpdateSales(user, normalizedBaseDate, request.getCycleType(), request.getTotalAmount(), hourlySales);
     }
 
-    private Long saveOrUpdateSales(LocalDate saleDate, CycleType cycleType, Long totalAmount, List<SalesHourly> hourlySales) {
-        List<Sales> existingSales = salesRepository.findBySaleDateAndCycleType(saleDate, cycleType);
+    private Long saveOrUpdateSales(User user, LocalDate saleDate, CycleType cycleType, Long totalAmount, List<SalesHourly> hourlySales) {
+        List<Sales> existingSales = salesRepository.findByUserAndSaleDateAndCycleType(user, saleDate, cycleType);
 
         if (!existingSales.isEmpty()) {
-            Sales latestSales = existingSales.stream()
-                    .max(Comparator.comparing(Sales::getUpdatedAt))
-                    .orElseThrow();
+            Sales latestSales = existingSales.stream().max(Comparator.comparing(Sales::getUpdatedAt)).orElseThrow();
             latestSales.update(totalAmount);
             latestSales.replaceHourlySales(hourlySales);
 
-            List<Sales> duplicates = existingSales.stream()
-                    .filter(sales -> !sales.getId().equals(latestSales.getId()))
-                    .toList();
+            List<Sales> duplicates = existingSales.stream().filter(s -> !s.getId().equals(latestSales.getId())).toList();
             salesRepository.deleteAll(duplicates);
             return latestSales.getId();
         }
 
         Sales sales = Sales.builder()
+                .user(user)
                 .saleDate(saleDate)
                 .cycleType(cycleType)
                 .totalAmount(totalAmount)
                 .build();
         hourlySales.forEach(sales::addHourlySale);
-
         return salesRepository.save(sales).getId();
     }
 
     private List<SalesHourly> buildHourlySales(SalesCreateRequest request) {
         List<SalesHourly> hourlySales = new ArrayList<>();
         if (request.getCycleType() == CycleType.HOURLY && request.getHourlySales() != null) {
-            for (SalesCreateRequest.HourlySalesRequest hourlyDto : request.getHourlySales()) {
-                hourlySales.add(SalesHourly.builder()
-                        .saleHour(hourlyDto.getSaleHour())
-                        .amount(hourlyDto.getAmount())
-                        .build());
+            for (SalesCreateRequest.HourlySalesRequest h : request.getHourlySales()) {
+                hourlySales.add(SalesHourly.builder().saleHour(h.getSaleHour()).amount(h.getAmount()).build());
             }
         }
         return hourlySales;
     }
 
-    private Sales findLatestSales(LocalDate saleDate, CycleType cycleType) {
-        return salesRepository.findBySaleDateAndCycleType(saleDate, cycleType).stream()
-                .max(Comparator.comparing(Sales::getUpdatedAt))
-                .orElse(null);
+    private Sales findLatestSales(User user, LocalDate saleDate, CycleType cycleType) {
+        return salesRepository.findByUserAndSaleDateAndCycleType(user, saleDate, cycleType).stream()
+                .max(Comparator.comparing(Sales::getUpdatedAt)).orElse(null);
     }
 
     private List<SalesPeriodResponse.HourlySalesResponse> toHourlyResponses(Sales sales, CycleType cycleType) {
-        if (sales == null || cycleType != CycleType.HOURLY) {
-            return List.of();
-        }
-
+        if (sales == null || cycleType != CycleType.HOURLY) return List.of();
         return sales.getHourlySales().stream()
                 .sorted(Comparator.comparing(SalesHourly::getSaleHour))
-                .map(hourly -> SalesPeriodResponse.HourlySalesResponse.builder()
-                        .hour(hourly.getSaleHour())
-                        .amount(hourly.getAmount())
-                        .build())
+                .map(h -> SalesPeriodResponse.HourlySalesResponse.builder().hour(h.getSaleHour()).amount(h.getAmount()).build())
                 .toList();
     }
 
     private LocalDate normalizeBaseDate(CycleType cycleType, LocalDate baseDate) {
-        if (cycleType == CycleType.WEEKLY) {
-            return baseDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
-        }
-        if (cycleType == CycleType.MONTHLY) {
-            return baseDate.withDayOfMonth(1);
-        }
+        if (cycleType == CycleType.WEEKLY) return baseDate.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+        if (cycleType == CycleType.MONTHLY) return baseDate.withDayOfMonth(1);
         return baseDate;
     }
 
@@ -168,6 +147,19 @@ public class SalesService {
         };
     }
 
-    private record PeriodRange(LocalDate startDate, LocalDate endDate) {
+    private record PeriodRange(LocalDate startDate, LocalDate endDate) {}
+
+    private User getCurrentUser() {
+        Long userId = getCurrentUserId();
+        return userRepository.findByIdAndStatusNot(userId, UserStatus.DELETED)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    private Long getCurrentUserId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !(auth.getPrincipal() instanceof CustomUserDetails userDetails)) {
+            throw new CustomException(ErrorCode.UNAUTHORIZED);
+        }
+        return userDetails.getUserId();
     }
 }
