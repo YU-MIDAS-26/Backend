@@ -47,9 +47,6 @@ public class PaymentService {
     private final SalesService salesService;
     private final UserRepository userRepository;
 
-    /**
-     * 판매전표 CSV 업로드 → 검증 → DB 저장 (현재 로그인 사장님 기준)
-     */
     @Transactional
     public UploadResult upload(MultipartFile file) {
         if (file == null || file.isEmpty()) {
@@ -71,7 +68,6 @@ public class PaymentService {
                 errors.add(rowError(rowNumber, "취소 거래는 저장하지 않음"));
                 continue;
             }
-
             if (row.getPaidAt() == null) {
                 errors.add(rowError(rowNumber, "결제시각이 비어있음"));
                 continue;
@@ -91,7 +87,6 @@ public class PaymentService {
                 continue;
             }
 
-            // 중복 체크 (사장님 기준)
             if (paymentRepository.existsByUserAndPaidAtAndOrderNumberAndChannel(
                     user, row.getPaidAt(), row.getOrderNumber(), channel)) {
                 errors.add(rowError(rowNumber, "중복 거래(이미 저장됨)"));
@@ -137,7 +132,6 @@ public class PaymentService {
     private List<PaymentRowDto> parseCsv(MultipartFile file) {
         try (BufferedReader reader = new BufferedReader(
                 new InputStreamReader(file.getInputStream(), StandardCharsets.UTF_8))) {
-
             CsvToBean<PaymentRowDto> beans = new CsvToBeanBuilder<PaymentRowDto>(reader)
                     .withType(PaymentRowDto.class)
                     .withIgnoreLeadingWhiteSpace(true)
@@ -160,9 +154,6 @@ public class PaymentService {
                 .build();
     }
 
-    /**
-     * 일별 매출 추이 조회 (현재 로그인 사장님)
-     */
     @Transactional(readOnly = true)
     public List<DailyStatsDto> getDailyStats(LocalDate from, LocalDate to) {
         User user = getCurrentUser();
@@ -187,9 +178,6 @@ public class PaymentService {
         return LocalDate.parse(value.toString());
     }
 
-    /**
-     * 요일 x 시간대 매출 히트맵 조회 (현재 로그인 사장님)
-     */
     @Transactional(readOnly = true)
     public List<HourlyHeatmapDto> getHourlyHeatmap(LocalDate from, LocalDate to) {
         User user = getCurrentUser();
@@ -213,9 +201,6 @@ public class PaymentService {
         return mysqlDow == 1 ? 7 : mysqlDow - 1;
     }
 
-    /**
-     * 채널별(매장/배달) 매출 비중 조회 (현재 로그인 사장님)
-     */
     @Transactional(readOnly = true)
     public List<ChannelBreakdownDto> getChannelBreakdown(LocalDate from, LocalDate to) {
         User user = getCurrentUser();
@@ -236,9 +221,7 @@ public class PaymentService {
                     Channel channel = Channel.valueOf((String) row[0]);
                     long amount = ((Number) row[1]).longValue();
                     long count = ((Number) row[2]).longValue();
-                    double ratio = totalAmount > 0
-                            ? (double) amount / totalAmount
-                            : 0.0;
+                    double ratio = totalAmount > 0 ? (double) amount / totalAmount : 0.0;
                     return ChannelBreakdownDto.builder()
                             .channel(channel)
                             .label(channelLabel(channel))
@@ -256,8 +239,6 @@ public class PaymentService {
             case DELIVERY -> "배달";
         };
     }
-
-    // ── 내부 헬퍼 (현재 로그인 사장님) ────────────────────────────────────
 
     private User getCurrentUser() {
         Long userId = getCurrentUserId();

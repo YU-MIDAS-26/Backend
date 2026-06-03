@@ -14,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 일별/월별 매출 정보를 저장하는 엔티티 (사장님별 개별화)
+ * 일별/월별 매출 (사장님별 개별화)
  */
 @Entity
 @Getter
@@ -33,7 +33,7 @@ public class Sales extends BaseTimeEntity {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
-    private User user;                  // 사장님
+    private User user;
 
     @Column(nullable = false)
     private LocalDate saleDate;

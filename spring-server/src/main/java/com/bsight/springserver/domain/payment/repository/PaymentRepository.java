@@ -22,10 +22,6 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
                                          @Param("from") LocalDateTime from,
                                          @Param("to") LocalDateTime to);
 
-    /**
-     * 일별 매출 집계 (날짜, 금액합계, 건수) — 사장님별
-     * 반환: Object[] = [java.sql.Date, BigDecimal/Long, Long]
-     */
     @Query(value = "SELECT DATE(paid_at) AS d, SUM(amount) AS total, COUNT(*) AS cnt " +
             "FROM payments " +
             "WHERE user_id = :userId AND paid_at BETWEEN :from AND :to " +
@@ -35,9 +31,6 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
                                      @Param("from") LocalDateTime from,
                                      @Param("to") LocalDateTime to);
 
-    /**
-     * 요일 x 시간대 매출 집계 (히트맵용) — 사장님별
-     */
     @Query(value = "SELECT DAYOFWEEK(paid_at) AS dow, " +
             "       HOUR(paid_at)      AS hr, " +
             "       SUM(amount)        AS total, " +
@@ -50,9 +43,6 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
                                        @Param("from") LocalDateTime from,
                                        @Param("to") LocalDateTime to);
 
-    /**
-     * 채널별 매출 집계 (도넛 차트용) — 사장님별
-     */
     @Query(value = "SELECT channel, SUM(amount) AS total, COUNT(*) AS cnt " +
             "FROM payments " +
             "WHERE user_id = :userId AND paid_at BETWEEN :from AND :to " +

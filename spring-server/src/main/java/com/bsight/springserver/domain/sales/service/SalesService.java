@@ -28,7 +28,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * 매출 관련 비즈니스 로직 (사장님별 개별화)
+ * 매출 비즈니스 로직 (사장님별 개별화)
  */
 @Service
 @Transactional
@@ -89,9 +89,6 @@ public class SalesService {
         salesRepository.deleteByUserAndSaleDateAndCycleType(user, normalizedBaseDate, cycleType);
     }
 
-    /**
-     * CSV 업로드 시 PaymentService에서 호출. user 명시적으로 받음.
-     */
     public Long saveDailySalesFromCsv(User user, LocalDate saleDate, Long totalAmount) {
         return saveOrUpdateSales(user, saleDate, CycleType.DAILY, totalAmount, List.of());
     }
@@ -184,8 +181,6 @@ public class SalesService {
 
     private record PeriodRange(LocalDate startDate, LocalDate endDate) {
     }
-
-    // ── 내부 헬퍼 (현재 로그인 사장님) ────────────────────────────────────
 
     private User getCurrentUser() {
         Long userId = getCurrentUserId();
