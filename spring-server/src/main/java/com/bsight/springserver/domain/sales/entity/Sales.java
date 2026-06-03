@@ -49,4 +49,13 @@ public class Sales extends BaseTimeEntity {
         this.hourlySales.add(hourlySale);
         hourlySale.setSales(this);
     }
+
+    public void update(Long totalAmount) {
+        this.totalAmount = totalAmount;
+    }
+
+    public void replaceHourlySales(List<SalesHourly> hourlySales) {
+        this.hourlySales.clear();
+        hourlySales.forEach(this::addHourlySale);
+    }
 }
