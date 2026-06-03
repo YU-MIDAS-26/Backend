@@ -13,5 +13,7 @@ public interface SalesRepository extends JpaRepository<Sales, Long> {
 
     List<Sales> findBySaleDateAndCycleType(LocalDate saleDate, CycleType cycleType);
 
+    List<Sales> findBySaleDateBetweenAndCycleType(LocalDate startDate, LocalDate endDate, CycleType cycleType);
+
     void deleteBySaleDateAndCycleType(LocalDate saleDate, CycleType cycleType);
 }
