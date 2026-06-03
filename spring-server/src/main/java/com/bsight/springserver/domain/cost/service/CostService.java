@@ -6,14 +6,22 @@ import com.bsight.springserver.domain.cost.entity.FixedCost;
 import com.bsight.springserver.domain.cost.entity.VariableCost;
 import com.bsight.springserver.domain.cost.repository.FixedCostRepository;
 import com.bsight.springserver.domain.cost.repository.VariableCostRepository;
+import com.bsight.springserver.domain.user.entity.User;
+import com.bsight.springserver.domain.user.entity.UserStatus;
+import com.bsight.springserver.domain.user.repository.UserRepository;
+import com.bsight.springserver.global.exception.CustomException;
+import com.bsight.springserver.global.exception.ErrorCode;
+import com.bsight.springserver.global.security.auth.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Optional;
 
 /**
- * 지출(고정비, 변동비) 관련 비즈니스 로직을 처리하는 서비스
+ * 지출 비즈니스 로직 (사장님별 개별화)
  */
 @Service
 @Transactional
@@ -22,22 +30,22 @@ public class CostService {
 
     private final FixedCostRepository fixedCostRepository;
     private final VariableCostRepository variableCostRepository;
+    private final UserRepository userRepository;
 
     /**
-     * 고정비를 등록하거나, 이미 해당 월의 데이터가 있다면 수정합니다.
+     * 현재 로그인 사장님의 고정비 저장/수정 (해당 월 이미 있으면 update)
      */
     public Long saveOrUpdateFixedCost(FixedCostRequest request) {
-        // 이미 해당 년월(예: "2026-05")의 데이터가 있는지 확인
-        Optional<FixedCost> existingCost = fixedCostRepository.findByTargetYearMonth(request.getTargetYearMonth());
+        User user = getCurrentUser();
+        Optional<FixedCost> existingCost = fixedCostRepository.findByUserAndTargetYearMonth(user, request.getTargetYearMonth());
 
         if (existingCost.isPresent()) {
-            // 데이터가 존재하면 기존 값을 업데이트 (총합은 엔티티 내부에서 자동 계산됨)
             FixedCost cost = existingCost.get();
             cost.update(request.getRent(), request.getUtilityCost());
             return cost.getId();
         } else {
-            // 데이터가 없으면 새로 생성하여 저장
             FixedCost newCost = FixedCost.builder()
+                    .user(user)
                     .targetYearMonth(request.getTargetYearMonth())
                     .rent(request.getRent())
                     .utilityCost(request.getUtilityCost())
@@ -47,17 +55,35 @@ public class CostService {
     }
 
     /**
-     * 변동비를 등록합니다.
+     * 현재 로그인 사장님의 변동비 등록
      */
     public Long createVariableCost(VariableCostRequest request) {
+        User user = getCurrentUser();
         VariableCost variableCost = VariableCost.builder()
+                .user(user)
                 .costDate(request.getCostDate())
                 .cycleType(request.getCycleType())
                 .ingredientCost(request.getIngredientCost())
                 .salaryCost(request.getSalaryCost())
                 .build();
-        
-        // 총합은 Entity 생성 시점에 자동 계산되어 DB에 저장됩니다.
+
         return variableCostRepository.save(variableCost).getId();
+    }
+
+    // ── 내부 헬퍼 ────────────────────────────────────
+
+    private User getCurrentUser() {
+        Long userId = getCurrentUserId();
+        return userRepository.findByIdAndStatusNot(userId, UserStatus.DELETED)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    private Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null
+                || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
+            throw new CustomException(ErrorCode.UNAUTHORIZED);
+        }
+        return userDetails.getUserId();
     }
 }
