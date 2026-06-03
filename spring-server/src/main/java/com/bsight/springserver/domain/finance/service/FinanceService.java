@@ -8,7 +8,7 @@ import com.bsight.springserver.domain.finance.dto.response.AiInsightResponse;
 import com.bsight.springserver.domain.finance.dto.response.CalendarDailyResponse;
 import com.bsight.springserver.domain.finance.dto.response.DailyDetailResponse;
 import com.bsight.springserver.domain.sales.entity.Sales;
-import com.bsight.springserver.domain.sales.repository.SalesRepository;
+import com.bsight.springserver.domain.sales.service.SalesService;
 import com.bsight.springserver.global.ai.OpenAiClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
@@ -30,7 +30,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class FinanceService {
 
-    private final SalesRepository salesRepository;
+    private final SalesService salesService;
     private final FixedCostRepository fixedCostRepository;
     private final VariableCostRepository variableCostRepository;
     private final OpenAiClient openAiClient;
@@ -45,10 +45,8 @@ public class FinanceService {
         LocalDate end = yearMonth.atEndOfMonth();
         int daysInMonth = yearMonth.lengthOfMonth();
 
-        // 1. 해당 월의 모든 데이터 조회
-        List<Sales> salesList = salesRepository.findAll().stream() // 실무에선 쿼리로 기간 필터링 권장
-                .filter(s -> !s.getSaleDate().isBefore(start) && !s.getSaleDate().isAfter(end))
-                .collect(Collectors.toList());
+        // 1. 해당 월의 일별 매출/지출 데이터 조회
+        List<Sales> salesList = salesService.getDailySalesBetween(start, end);
         
         List<VariableCost> variableCosts = variableCostRepository.findByCostDateBetween(start, end);
         
@@ -84,7 +82,7 @@ public class FinanceService {
         String yearMonthStr = yearMonth.toString();
         
         // 데이터 조회
-        Sales sales = salesRepository.findBySaleDate(date).orElse(null);
+        Sales sales = salesService.getLatestDailySales(date);
         List<VariableCost> varCosts = variableCostRepository.findByCostDateBetween(date, date);
         FixedCost fixedCostEntity = fixedCostRepository.findByTargetYearMonth(yearMonthStr).orElse(null);
         
@@ -121,9 +119,7 @@ public class FinanceService {
         LocalDate end = yearMonth.atEndOfMonth();
 
         // 1. 데이터 수집
-        List<Sales> salesList = salesRepository.findAll().stream()
-                .filter(s -> !s.getSaleDate().isBefore(start) && !s.getSaleDate().isAfter(end))
-                .toList();
+        List<Sales> salesList = salesService.getDailySalesBetween(start, end);
         List<VariableCost> variableCosts = variableCostRepository.findByCostDateBetween(start, end);
         FixedCost fixedCost = fixedCostRepository.findByTargetYearMonth(yearMonthStr).orElse(null);
 
