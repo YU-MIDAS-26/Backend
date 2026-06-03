@@ -9,9 +9,17 @@ import com.bsight.springserver.domain.finance.dto.response.CalendarDailyResponse
 import com.bsight.springserver.domain.finance.dto.response.DailyDetailResponse;
 import com.bsight.springserver.domain.sales.entity.Sales;
 import com.bsight.springserver.domain.sales.service.SalesService;
+import com.bsight.springserver.domain.user.entity.User;
+import com.bsight.springserver.domain.user.entity.UserStatus;
+import com.bsight.springserver.domain.user.repository.UserRepository;
 import com.bsight.springserver.global.ai.OpenAiClient;
+import com.bsight.springserver.global.exception.CustomException;
+import com.bsight.springserver.global.exception.ErrorCode;
+import com.bsight.springserver.global.security.auth.CustomUserDetails;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -33,6 +41,7 @@ public class FinanceService {
     private final SalesService salesService;
     private final FixedCostRepository fixedCostRepository;
     private final VariableCostRepository variableCostRepository;
+    private final UserRepository userRepository;
     private final OpenAiClient openAiClient;
     private final ObjectMapper objectMapper;
 
@@ -44,13 +53,14 @@ public class FinanceService {
         LocalDate start = yearMonth.atDay(1);
         LocalDate end = yearMonth.atEndOfMonth();
         int daysInMonth = yearMonth.lengthOfMonth();
+        User user = getCurrentUser();
 
         // 1. 해당 월의 일별 매출/지출 데이터 조회
         List<Sales> salesList = salesService.getDailySalesBetween(start, end);
         
-        List<VariableCost> variableCosts = variableCostRepository.findByCostDateBetween(start, end);
+        List<VariableCost> variableCosts = variableCostRepository.findByUserAndCostDateBetween(user, start, end);
         
-        FixedCost fixedCostEntity = fixedCostRepository.findByTargetYearMonth(yearMonthStr).orElse(null);
+        FixedCost fixedCostEntity = fixedCostRepository.findByUserAndTargetYearMonth(user, yearMonthStr).orElse(null);
         long dailyFixedCost = (fixedCostEntity != null) ? (fixedCostEntity.getTotalCost() / daysInMonth) : 0L;
 
         // 2. 날짜별로 맵핑 (성능 최적화)
@@ -80,11 +90,12 @@ public class FinanceService {
     public DailyDetailResponse getDailyDetail(LocalDate date) {
         YearMonth yearMonth = YearMonth.from(date);
         String yearMonthStr = yearMonth.toString();
+        User user = getCurrentUser();
         
         // 데이터 조회
         Sales sales = salesService.getLatestDailySales(date);
-        List<VariableCost> varCosts = variableCostRepository.findByCostDateBetween(date, date);
-        FixedCost fixedCostEntity = fixedCostRepository.findByTargetYearMonth(yearMonthStr).orElse(null);
+        List<VariableCost> varCosts = variableCostRepository.findByUserAndCostDateBetween(user, date, date);
+        FixedCost fixedCostEntity = fixedCostRepository.findByUserAndTargetYearMonth(user, yearMonthStr).orElse(null);
         
         long totalSales = (sales != null) ? sales.getTotalAmount() : 0L;
         long variableCost = varCosts.stream().mapToLong(VariableCost::getTotalCost).sum();
@@ -117,11 +128,12 @@ public class FinanceService {
         YearMonth yearMonth = YearMonth.parse(yearMonthStr);
         LocalDate start = yearMonth.atDay(1);
         LocalDate end = yearMonth.atEndOfMonth();
+        User user = getCurrentUser();
 
         // 1. 데이터 수집
         List<Sales> salesList = salesService.getDailySalesBetween(start, end);
-        List<VariableCost> variableCosts = variableCostRepository.findByCostDateBetween(start, end);
-        FixedCost fixedCost = fixedCostRepository.findByTargetYearMonth(yearMonthStr).orElse(null);
+        List<VariableCost> variableCosts = variableCostRepository.findByUserAndCostDateBetween(user, start, end);
+        FixedCost fixedCost = fixedCostRepository.findByUserAndTargetYearMonth(user, yearMonthStr).orElse(null);
 
         long totalSales = salesList.stream().mapToLong(Sales::getTotalAmount).sum();
         long totalVarCost = variableCosts.stream().mapToLong(VariableCost::getTotalCost).sum();
@@ -171,5 +183,20 @@ public class FinanceService {
                 .salesFlow("주말 매출이 전체의 50% 이상을 차지하며 특정 요일 편중 현상이 있습니다.")
                 .additionalInsight("다음 달은 지역 축제가 예정되어 있어 매출 상승이 기대됩니다.")
                 .build();
+    }
+
+    private User getCurrentUser() {
+        Long userId = getCurrentUserId();
+        return userRepository.findByIdAndStatusNot(userId, UserStatus.DELETED)
+                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
+    }
+
+    private Long getCurrentUserId() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null
+                || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
+            throw new CustomException(ErrorCode.UNAUTHORIZED);
+        }
+        return userDetails.getUserId();
     }
 }
