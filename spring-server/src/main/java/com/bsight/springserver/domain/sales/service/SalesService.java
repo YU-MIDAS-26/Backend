@@ -6,15 +6,7 @@ import com.bsight.springserver.domain.sales.dto.response.SalesPeriodResponse;
 import com.bsight.springserver.domain.sales.entity.Sales;
 import com.bsight.springserver.domain.sales.entity.SalesHourly;
 import com.bsight.springserver.domain.sales.repository.SalesRepository;
-import com.bsight.springserver.domain.user.entity.User;
-import com.bsight.springserver.domain.user.entity.UserStatus;
-import com.bsight.springserver.domain.user.repository.UserRepository;
-import com.bsight.springserver.global.exception.CustomException;
-import com.bsight.springserver.global.exception.ErrorCode;
-import com.bsight.springserver.global.security.auth.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +20,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * 매출 비즈니스 로직 (사장님별 개별화)
+ * 매출 관련 비즈니스 로직을 처리하는 서비스
  */
 @Service
 @Transactional
@@ -36,15 +28,13 @@ import java.util.stream.Collectors;
 public class SalesService {
 
     private final SalesRepository salesRepository;
-    private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
     public SalesPeriodResponse getSalesPeriod(CycleType cycleType, LocalDate baseDate) {
-        User user = getCurrentUser();
         LocalDate normalizedBaseDate = normalizeBaseDate(cycleType, baseDate);
         PeriodRange periodRange = resolvePeriodRange(cycleType, normalizedBaseDate);
 
-        List<Sales> salesList = salesRepository.findByUserAndSaleDateAndCycleType(user, normalizedBaseDate, cycleType);
+        List<Sales> salesList = salesRepository.findBySaleDateAndCycleType(normalizedBaseDate, cycleType);
         Sales latestSales = salesList.stream()
                 .max(Comparator.comparing(Sales::getUpdatedAt))
                 .orElse(null);
@@ -61,14 +51,12 @@ public class SalesService {
 
     @Transactional(readOnly = true)
     public Sales getLatestDailySales(LocalDate saleDate) {
-        User user = getCurrentUser();
-        return findLatestSales(user, saleDate, CycleType.DAILY);
+        return findLatestSales(saleDate, CycleType.DAILY);
     }
 
     @Transactional(readOnly = true)
     public List<Sales> getDailySalesBetween(LocalDate startDate, LocalDate endDate) {
-        User user = getCurrentUser();
-        return salesRepository.findByUserAndSaleDateBetweenAndCycleType(user, startDate, endDate, CycleType.DAILY).stream()
+        return salesRepository.findBySaleDateBetweenAndCycleType(startDate, endDate, CycleType.DAILY).stream()
                 .collect(Collectors.groupingBy(Sales::getSaleDate))
                 .entrySet()
                 .stream()
@@ -84,24 +72,26 @@ public class SalesService {
     }
 
     public void deleteSalesPeriod(CycleType cycleType, LocalDate baseDate) {
-        User user = getCurrentUser();
         LocalDate normalizedBaseDate = normalizeBaseDate(cycleType, baseDate);
-        salesRepository.deleteByUserAndSaleDateAndCycleType(user, normalizedBaseDate, cycleType);
+        salesRepository.deleteBySaleDateAndCycleType(normalizedBaseDate, cycleType);
     }
 
-    public Long saveDailySalesFromCsv(User user, LocalDate saleDate, Long totalAmount) {
-        return saveOrUpdateSales(user, saleDate, CycleType.DAILY, totalAmount, List.of());
+    public Long saveDailySalesFromCsv(LocalDate saleDate, Long totalAmount) {
+        return saveOrUpdateSales(saleDate, CycleType.DAILY, totalAmount, List.of());
     }
 
+    /**
+     * 매출 데이터를 저장하거나, 같은 기준일/주기의 데이터가 있으면 수정합니다.
+     * 주기가 HOURLY인 경우 하위 시간대별 매출도 함께 저장합니다.
+     */
     public Long createSales(SalesCreateRequest request) {
-        User user = getCurrentUser();
         LocalDate normalizedBaseDate = normalizeBaseDate(request.getCycleType(), request.getSaleDate());
         List<SalesHourly> hourlySales = buildHourlySales(request);
-        return saveOrUpdateSales(user, normalizedBaseDate, request.getCycleType(), request.getTotalAmount(), hourlySales);
+        return saveOrUpdateSales(normalizedBaseDate, request.getCycleType(), request.getTotalAmount(), hourlySales);
     }
 
-    private Long saveOrUpdateSales(User user, LocalDate saleDate, CycleType cycleType, Long totalAmount, List<SalesHourly> hourlySales) {
-        List<Sales> existingSales = salesRepository.findByUserAndSaleDateAndCycleType(user, saleDate, cycleType);
+    private Long saveOrUpdateSales(LocalDate saleDate, CycleType cycleType, Long totalAmount, List<SalesHourly> hourlySales) {
+        List<Sales> existingSales = salesRepository.findBySaleDateAndCycleType(saleDate, cycleType);
 
         if (!existingSales.isEmpty()) {
             Sales latestSales = existingSales.stream()
@@ -118,7 +108,6 @@ public class SalesService {
         }
 
         Sales sales = Sales.builder()
-                .user(user)
                 .saleDate(saleDate)
                 .cycleType(cycleType)
                 .totalAmount(totalAmount)
@@ -141,8 +130,8 @@ public class SalesService {
         return hourlySales;
     }
 
-    private Sales findLatestSales(User user, LocalDate saleDate, CycleType cycleType) {
-        return salesRepository.findByUserAndSaleDateAndCycleType(user, saleDate, cycleType).stream()
+    private Sales findLatestSales(LocalDate saleDate, CycleType cycleType) {
+        return salesRepository.findBySaleDateAndCycleType(saleDate, cycleType).stream()
                 .max(Comparator.comparing(Sales::getUpdatedAt))
                 .orElse(null);
     }
@@ -180,20 +169,5 @@ public class SalesService {
     }
 
     private record PeriodRange(LocalDate startDate, LocalDate endDate) {
-    }
-
-    private User getCurrentUser() {
-        Long userId = getCurrentUserId();
-        return userRepository.findByIdAndStatusNot(userId, UserStatus.DELETED)
-                .orElseThrow(() -> new CustomException(ErrorCode.USER_NOT_FOUND));
-    }
-
-    private Long getCurrentUserId() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null
-                || !(authentication.getPrincipal() instanceof CustomUserDetails userDetails)) {
-            throw new CustomException(ErrorCode.UNAUTHORIZED);
-        }
-        return userDetails.getUserId();
     }
 }

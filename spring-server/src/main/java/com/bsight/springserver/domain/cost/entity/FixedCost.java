@@ -1,5 +1,6 @@
 package com.bsight.springserver.domain.cost.entity;
 
+import com.bsight.springserver.domain.user.entity.User;
 import com.bsight.springserver.global.entity.BaseTimeEntity;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -8,11 +9,20 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
- * 임대료, 공과금 등 고정 지출을 관리하는 엔티티
+ * 임대료, 공과금 등 고정 지출 (사장님별 개별화)
  */
 @Entity
 @Getter
-@Table(name = "fixed_costs")
+@Table(
+        name = "fixed_costs",
+        indexes = {
+                @Index(name = "idx_fixed_cost_user_month", columnList = "user_id, targetYearMonth")
+        },
+        uniqueConstraints = @UniqueConstraint(
+                name = "uq_fixed_cost_user_month",
+                columnNames = {"user_id", "targetYearMonth"}
+        )
+)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class FixedCost extends BaseTimeEntity {
 
@@ -20,24 +30,29 @@ public class FixedCost extends BaseTimeEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
     @Column(nullable = false)
     private String targetYearMonth; // 대상 년월 (YYYY-MM)
 
     @Column(nullable = false)
-    private Long rent; // 임대료
+    private Long rent;
 
     @Column(nullable = false)
-    private Long utilityCost; // 공과금
+    private Long utilityCost;
 
     @Column(nullable = false)
-    private Long totalCost; // 고정비 합계
+    private Long totalCost;
 
     @Builder
-    public FixedCost(String targetYearMonth, Long rent, Long utilityCost) {
+    public FixedCost(User user, String targetYearMonth, Long rent, Long utilityCost) {
+        this.user = user;
         this.targetYearMonth = targetYearMonth;
         this.rent = rent;
         this.utilityCost = utilityCost;
-        this.totalCost = rent + utilityCost; // 서버 측 자동 계산
+        this.totalCost = rent + utilityCost;
     }
 
     public void update(Long rent, Long utilityCost) {
