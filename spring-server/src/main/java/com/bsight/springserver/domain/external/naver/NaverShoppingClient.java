@@ -52,6 +52,26 @@ public class NaverShoppingClient {
     private static final Set<String> CATEGORY1_ALLOW = Set.of("식품");
 
     /**
+     * 1차 식자재로 인정할 category2 화이트리스트.
+     * (네이버 쇼핑 카테고리 체계상 "음료"가 category1=식품 아래에 있어
+     *  category1 단독 필터로는 사과주스/음료가 통과되는 문제 보정)
+     */
+    private static final Set<String> CATEGORY2_ALLOW = Set.of(
+            "농산물", "축산물", "수산물", "쌀/잡곡",
+            "조미료", "식용유", "장류", "젓갈/액젓",
+            "건어물", "수산가공품",
+            "냉장식품", "냉동식품"
+    );
+
+    /** category2 블랙리스트 (확실히 식자재 아닌 카테고리) */
+    private static final Set<String> CATEGORY2_BLACK = Set.of(
+            "음료", "주류", "차/커피", "다이어트식품",
+            "건강식품", "베이비/유아식품",
+            "과자/베이커리", "초콜릿/캔디",
+            "통조림/햄/소시지", "면류"  // 가공품 - 필요시 화이트로 옮길 수 있음
+    );
+
+    /**
      * 가공품/비식자재 키워드 — 제목에 포함되면 제외.
      * 예: "사과" 검색 시 "사과주스/사과즙/사과식초/사과잼/사과가루" 등 차단.
      */
@@ -89,6 +109,7 @@ public class NaverShoppingClient {
         List<NaverShoppingResponse.Item> strict = response.getItems().stream()
                 .filter(item -> item.getLprice() > 0)
                 .filter(NaverShoppingClient::isFoodCategory)
+                .filter(NaverShoppingClient::isAllowedSubCategory)
                 .filter(NaverShoppingClient::isNotProcessedProduct)
                 .sorted(Comparator
                         .comparingDouble(NaverShoppingClient::unitPricePerKg)
@@ -100,11 +121,27 @@ public class NaverShoppingClient {
             return strict;
         }
 
-        // 폴백: 블랙리스트 결과가 0건이면 카테고리만 유지 (가공된 형태가 정상인 재료 대응)
-        log.info("네이버 최저가 - 블랙리스트 적용 후 0건, 카테고리만 유지하고 폴백: {}", ingredientName);
+        // 폴백 1: 블랙리스트만 풀고 category2 화이트리스트는 유지
+        log.info("네이버 최저가 - 키워드 블랙리스트 적용 후 0건, 블랙리스트 풀고 폴백: {}", ingredientName);
+        List<NaverShoppingResponse.Item> fallback1 = response.getItems().stream()
+                .filter(item -> item.getLprice() > 0)
+                .filter(NaverShoppingClient::isFoodCategory)
+                .filter(NaverShoppingClient::isAllowedSubCategory)
+                .sorted(Comparator
+                        .comparingDouble(NaverShoppingClient::unitPricePerKg)
+                        .thenComparingInt(NaverShoppingResponse.Item::getLprice))
+                .limit(topN)
+                .toList();
+        if (!fallback1.isEmpty()) {
+            return fallback1;
+        }
+
+        // 폴백 2: category2 화이트리스트도 풀고 category2 블랙만 유지 (음료/주류 등은 끝까지 차단)
+        log.info("네이버 최저가 - category2 화이트 0건, 블랙만 적용하고 폴백: {}", ingredientName);
         return response.getItems().stream()
                 .filter(item -> item.getLprice() > 0)
                 .filter(NaverShoppingClient::isFoodCategory)
+                .filter(NaverShoppingClient::isNotBlockedSubCategory)
                 .sorted(Comparator
                         .comparingDouble(NaverShoppingClient::unitPricePerKg)
                         .thenComparingInt(NaverShoppingResponse.Item::getLprice))
@@ -115,6 +152,18 @@ public class NaverShoppingClient {
     private static boolean isFoodCategory(NaverShoppingResponse.Item item) {
         String c1 = item.getCategory1();
         return c1 != null && CATEGORY1_ALLOW.contains(c1);
+    }
+
+    /** category2가 식자재 화이트리스트에 포함되면 true */
+    private static boolean isAllowedSubCategory(NaverShoppingResponse.Item item) {
+        String c2 = item.getCategory2();
+        return c2 != null && CATEGORY2_ALLOW.contains(c2);
+    }
+
+    /** category2가 블랙리스트(음료/주류 등)이면 false */
+    private static boolean isNotBlockedSubCategory(NaverShoppingResponse.Item item) {
+        String c2 = item.getCategory2();
+        return c2 == null || !CATEGORY2_BLACK.contains(c2);
     }
 
     private static boolean isNotProcessedProduct(NaverShoppingResponse.Item item) {
