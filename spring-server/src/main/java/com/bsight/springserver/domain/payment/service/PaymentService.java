@@ -101,12 +101,6 @@ public class PaymentService {
                 datesToSync.add(row.getPaidAt().toLocalDate());
                 continue;
             }
-            if (paymentRepository.existsByPaidAtAndOrderNumberAndChannel(
-                    row.getPaidAt(), row.getOrderNumber(), channel)) {
-                errors.add(rowError(rowNumber, "중복 거래(기존 데이터와 중복)"));
-                datesToSync.add(row.getPaidAt().toLocalDate());
-                continue;
-            }
 
             datesToSync.add(row.getPaidAt().toLocalDate());
             toSave.add(Payment.builder()
