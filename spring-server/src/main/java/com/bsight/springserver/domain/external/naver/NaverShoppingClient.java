@@ -115,9 +115,7 @@ public class NaverShoppingClient {
                 .filter(NaverShoppingClient::isFoodCategory)
                 .filter(NaverShoppingClient::isAllowedSubCategory)
                 .filter(NaverShoppingClient::isNotProcessedProduct)
-                .sorted(Comparator
-                        .comparingDouble(NaverShoppingClient::unitPricePerKg)
-                        .thenComparingInt(NaverShoppingResponse.Item::getLprice))
+                .sorted(Comparator.comparingInt(NaverShoppingResponse.Item::getLprice))
                 .limit(topN)
                 .toList();
 
@@ -131,9 +129,7 @@ public class NaverShoppingClient {
                 .filter(item -> item.getLprice() >= MIN_VALID_PRICE)
                 .filter(NaverShoppingClient::isFoodCategory)
                 .filter(NaverShoppingClient::isAllowedSubCategory)
-                .sorted(Comparator
-                        .comparingDouble(NaverShoppingClient::unitPricePerKg)
-                        .thenComparingInt(NaverShoppingResponse.Item::getLprice))
+                .sorted(Comparator.comparingInt(NaverShoppingResponse.Item::getLprice))
                 .limit(topN)
                 .toList();
         if (!fallback1.isEmpty()) {
@@ -146,9 +142,7 @@ public class NaverShoppingClient {
                 .filter(item -> item.getLprice() >= MIN_VALID_PRICE)
                 .filter(NaverShoppingClient::isFoodCategory)
                 .filter(NaverShoppingClient::isNotBlockedSubCategory)
-                .sorted(Comparator
-                        .comparingDouble(NaverShoppingClient::unitPricePerKg)
-                        .thenComparingInt(NaverShoppingResponse.Item::getLprice))
+                .sorted(Comparator.comparingInt(NaverShoppingResponse.Item::getLprice))
                 .limit(topN)
                 .toList();
     }
