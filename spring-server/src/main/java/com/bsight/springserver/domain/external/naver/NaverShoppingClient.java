@@ -35,7 +35,7 @@ public class NaverShoppingClient {
                     .uri(uriBuilder -> uriBuilder
                             .queryParam("query", query)
                             .queryParam("display", display)
-                            .queryParam("sort", "asc")   // 가격 오름차순 (공식: asc / dsc)
+                            .queryParam("sort", "sim")   // 관련도 정렬 (asc는 10원짜리 스팸이 상위에 노출됨)
                             .build())
                     .retrieve()
                     .bodyToMono(NaverShoppingResponse.class)
@@ -100,14 +100,18 @@ public class NaverShoppingClient {
      * - 1kg 환산 단위가격 기준 오름차순 정렬
      * - 블랙리스트로 0건이 되면 카테고리만 유지하고 폴백 (예: "후추", "고춧가루")
      */
+    /** 비정상 스팸 가격 컷오프 (10원짜리 광고/미끼 차단) */
+    private static final int MIN_VALID_PRICE = 1000;
+
     public List<NaverShoppingResponse.Item> searchLowestPrice(String ingredientName, int topN) {
-        NaverShoppingResponse response = search(ingredientName + " 식자재", 100);
+        // "식자재" 부가 키워드 제거 — 음료 회사들이 "식자재"로 마케팅된 가공품을 끌어옴
+        NaverShoppingResponse response = search(ingredientName, 100);
         if (response == null || response.getItems() == null) {
             return List.of();
         }
 
         List<NaverShoppingResponse.Item> strict = response.getItems().stream()
-                .filter(item -> item.getLprice() > 0)
+                .filter(item -> item.getLprice() >= MIN_VALID_PRICE)
                 .filter(NaverShoppingClient::isFoodCategory)
                 .filter(NaverShoppingClient::isAllowedSubCategory)
                 .filter(NaverShoppingClient::isNotProcessedProduct)
@@ -124,7 +128,7 @@ public class NaverShoppingClient {
         // 폴백 1: 블랙리스트만 풀고 category2 화이트리스트는 유지
         log.info("네이버 최저가 - 키워드 블랙리스트 적용 후 0건, 블랙리스트 풀고 폴백: {}", ingredientName);
         List<NaverShoppingResponse.Item> fallback1 = response.getItems().stream()
-                .filter(item -> item.getLprice() > 0)
+                .filter(item -> item.getLprice() >= MIN_VALID_PRICE)
                 .filter(NaverShoppingClient::isFoodCategory)
                 .filter(NaverShoppingClient::isAllowedSubCategory)
                 .sorted(Comparator
@@ -139,7 +143,7 @@ public class NaverShoppingClient {
         // 폴백 2: category2 화이트리스트도 풀고 category2 블랙만 유지 (음료/주류 등은 끝까지 차단)
         log.info("네이버 최저가 - category2 화이트 0건, 블랙만 적용하고 폴백: {}", ingredientName);
         return response.getItems().stream()
-                .filter(item -> item.getLprice() > 0)
+                .filter(item -> item.getLprice() >= MIN_VALID_PRICE)
                 .filter(NaverShoppingClient::isFoodCategory)
                 .filter(NaverShoppingClient::isNotBlockedSubCategory)
                 .sorted(Comparator
