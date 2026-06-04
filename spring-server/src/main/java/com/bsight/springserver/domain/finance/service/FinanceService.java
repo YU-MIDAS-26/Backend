@@ -1,5 +1,6 @@
 package com.bsight.springserver.domain.finance.service;
 
+import com.bsight.springserver.common.enums.CycleType;
 import com.bsight.springserver.domain.cost.entity.FixedCost;
 import com.bsight.springserver.domain.cost.entity.VariableCost;
 import com.bsight.springserver.domain.cost.repository.FixedCostRepository;
@@ -91,24 +92,24 @@ public class FinanceService {
         YearMonth yearMonth = YearMonth.from(date);
         String yearMonthStr = yearMonth.toString();
         User user = getCurrentUser();
-        
+
         // 데이터 조회
-        Sales sales = salesService.getLatestDailySales(date);
+        List<Sales> salesEntries = salesService.getDailyDisplaySales(date);
         List<VariableCost> varCosts = variableCostRepository.findByUserAndCostDateBetween(user, date, date);
         FixedCost fixedCostEntity = fixedCostRepository.findByUserAndTargetYearMonth(user, yearMonthStr).orElse(null);
         
-        long totalSales = (sales != null) ? sales.getTotalAmount() : 0L;
+        long totalSales = salesEntries.stream().mapToLong(Sales::getTotalAmount).sum();
         long variableCost = varCosts.stream().mapToLong(VariableCost::getTotalCost).sum();
         long fixedCost = (fixedCostEntity != null) ? (fixedCostEntity.getTotalCost() / yearMonth.lengthOfMonth()) : 0L;
         long totalExpense = variableCost + fixedCost;
 
         // 시간대별 매출 가공
-        List<DailyDetailResponse.HourlySalesDetail> hourlyDetails = new ArrayList<>();
-        if (sales != null && !sales.getHourlySales().isEmpty()) {
-            hourlyDetails = sales.getHourlySales().stream()
-                    .map(h -> DailyDetailResponse.HourlySalesDetail.builder().hour(h.getSaleHour()).amount(h.getAmount()).build())
-                    .collect(Collectors.toList());
-        }
+        List<DailyDetailResponse.HourlySalesDetail> hourlyDetails = salesEntries.stream()
+                .filter(sales -> sales.getCycleType() == CycleType.HOURLY)
+                .flatMap(sales -> sales.getHourlySales().stream())
+                .map(h -> DailyDetailResponse.HourlySalesDetail.builder().hour(h.getSaleHour()).amount(h.getAmount()).build())
+                .sorted((a, b) -> a.getHour().compareTo(b.getHour()))
+                .collect(Collectors.toList());
 
         return DailyDetailResponse.builder()
                 .totalSales(totalSales)
