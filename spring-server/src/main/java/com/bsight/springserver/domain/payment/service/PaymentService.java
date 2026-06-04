@@ -58,6 +58,7 @@ public class PaymentService {
         List<UploadResult.RowError> errors = new ArrayList<>();
         List<Payment> toSave = new ArrayList<>();
         Set<LocalDate> datesToSync = new HashSet<>();
+        Set<PaymentDuplicateKey> seenPaymentKeys = new HashSet<>();
 
         int totalRows = rows.size();
         for (int i = 0; i < rows.size(); i++) {
@@ -87,9 +88,22 @@ public class PaymentService {
                 continue;
             }
 
+            PaymentDuplicateKey paymentKey = new PaymentDuplicateKey(row.getPaidAt(), row.getOrderNumber(), channel);
+            if (!seenPaymentKeys.add(paymentKey)) {
+                errors.add(rowError(rowNumber, "중복 거래(업로드 파일 내 중복)"));
+                datesToSync.add(row.getPaidAt().toLocalDate());
+                continue;
+            }
+
             if (paymentRepository.existsByUserAndPaidAtAndOrderNumberAndChannel(
                     user, row.getPaidAt(), row.getOrderNumber(), channel)) {
                 errors.add(rowError(rowNumber, "중복 거래(이미 저장됨)"));
+                datesToSync.add(row.getPaidAt().toLocalDate());
+                continue;
+            }
+            if (paymentRepository.existsByPaidAtAndOrderNumberAndChannel(
+                    row.getPaidAt(), row.getOrderNumber(), channel)) {
+                errors.add(rowError(rowNumber, "중복 거래(기존 데이터와 중복)"));
                 datesToSync.add(row.getPaidAt().toLocalDate());
                 continue;
             }
@@ -144,6 +158,8 @@ public class PaymentService {
     private UploadResult.RowError rowError(int rowNumber, String reason) {
         return UploadResult.RowError.builder().rowNumber(rowNumber).reason(reason).build();
     }
+
+    private record PaymentDuplicateKey(LocalDateTime paidAt, String orderNumber, Channel channel) {}
 
     @Transactional(readOnly = true)
     public List<DailyStatsDto> getDailyStats(LocalDate from, LocalDate to) {

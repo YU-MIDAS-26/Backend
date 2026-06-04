@@ -32,6 +32,8 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SalesService {
 
+    private static final List<CycleType> DAILY_DISPLAY_CYCLE_TYPES = List.of(CycleType.DAILY, CycleType.HOURLY);
+
     private final SalesRepository salesRepository;
     private final UserRepository userRepository;
 
@@ -60,14 +62,36 @@ public class SalesService {
     }
 
     @Transactional(readOnly = true)
+    public List<Sales> getDailyDisplaySales(LocalDate saleDate) {
+        User user = getCurrentUser();
+        return findLatestSalesByCycle(
+                salesRepository.findByUserAndSaleDateAndCycleTypeIn(user, saleDate, DAILY_DISPLAY_CYCLE_TYPES)
+        );
+    }
+
+    @Transactional(readOnly = true)
     public List<Sales> getDailySalesBetween(LocalDate startDate, LocalDate endDate) {
         User user = getCurrentUser();
-        return salesRepository.findByUserAndSaleDateBetweenAndCycleType(user, startDate, endDate, CycleType.DAILY).stream()
-                .collect(Collectors.groupingBy(Sales::getSaleDate))
+        return findLatestSalesByDateAndCycle(
+                salesRepository.findByUserAndSaleDateBetweenAndCycleTypeIn(user, startDate, endDate, DAILY_DISPLAY_CYCLE_TYPES)
+        );
+    }
+
+    private List<Sales> findLatestSalesByDateAndCycle(List<Sales> salesList) {
+        return salesList.stream()
+                .collect(Collectors.groupingBy(sales -> new SalesDateCycleKey(sales.getSaleDate(), sales.getCycleType())))
                 .entrySet().stream()
                 .collect(Collectors.toMap(Map.Entry::getKey,
                         entry -> entry.getValue().stream().max(Comparator.comparing(Sales::getUpdatedAt)).orElseThrow()))
                 .values().stream().toList();
+    }
+
+    private List<Sales> findLatestSalesByCycle(List<Sales> salesList) {
+        return salesList.stream()
+                .collect(Collectors.groupingBy(Sales::getCycleType))
+                .values().stream()
+                .map(group -> group.stream().max(Comparator.comparing(Sales::getUpdatedAt)).orElseThrow())
+                .toList();
     }
 
     public void deleteSalesPeriod(CycleType cycleType, LocalDate baseDate) {
@@ -148,6 +172,8 @@ public class SalesService {
     }
 
     private record PeriodRange(LocalDate startDate, LocalDate endDate) {}
+
+    private record SalesDateCycleKey(LocalDate saleDate, CycleType cycleType) {}
 
     private User getCurrentUser() {
         Long userId = getCurrentUserId();

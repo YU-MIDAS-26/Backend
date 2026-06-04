@@ -15,6 +15,9 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
     boolean existsByUserAndPaidAtAndOrderNumberAndChannel(
             User user, LocalDateTime paidAt, String orderNumber, Channel channel);
 
+    boolean existsByPaidAtAndOrderNumberAndChannel(
+            LocalDateTime paidAt, String orderNumber, Channel channel);
+
     @Query(value = "SELECT COALESCE(SUM(amount), 0) FROM payments " +
             "WHERE user_id = :userId AND paid_at BETWEEN :from AND :to", nativeQuery = true)
     Long sumAmountByUserAndPaidAtBetween(@Param("userId") Long userId,
